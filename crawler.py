@@ -177,7 +177,7 @@ def process_review(raw_text):
 	review['votes'] = convert_to_int( match.group(3) )
 	return review
 
-def get_reviews():
+def get_all_reviews():
 	"""
 	Downloads reviews for all the movies in the database.
 	"""
@@ -188,8 +188,8 @@ def get_reviews():
 
 	for r in results:
 		log('Downloading reviews for movie_id = {}'.format(r['movie_id']))
-		get_reviews(movie_id)
+		get_reviews(r['movie_id'])
 		sleep_time = np.max( [3, 4 * (2 + rng.standard_normal())] )
 		time.sleep(sleep_time)
 
-#get_reviews()
+get_all_reviews()
