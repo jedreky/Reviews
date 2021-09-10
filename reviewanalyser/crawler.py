@@ -158,5 +158,3 @@ def get_all_reviews():
 			time.sleep( aux.get_random_sleep_time() )
 	
 	aux.log('Downloading finished successfully.')
-
-#get_all_reviews()

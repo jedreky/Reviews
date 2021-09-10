@@ -123,6 +123,10 @@ def predict_rating(model, review, length):
 	print( np.round(y, 3) )
 
 """
+Things below must be properly cleaned up.
+"""
+
+"""
 emb_dict = get_embedding_dict(filename)
 
 X, Y = get_input_data(70, 50, 0.5)
