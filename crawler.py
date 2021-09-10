@@ -95,23 +95,25 @@ def extract_reviews(source, quality_threshold = 0.5, votes_threshold = 5):
 	Given a source code of a website extracts all the reviews and makes a list of those matching our criteria.
 	"""
 	matches = re.finditer('class="point-scale">', source)
-
 	reviews = []
 	prev_point = 0
 	
-	for match in matches:
-		if prev_point > 0:
-			review = process_review( aux.sanitise_text( source[ prev_point : match.start() ] ) )
-			if review['quality'] >= quality_threshold and review['votes'] >= votes_threshold:
-				reviews.append(review)
-
-		prev_point = match.start() - 30
+	matches_list = [ *matches ]
 	
-	review = process_review( aux.sanitise_text( source[ prev_point : ] ) )
+	if len(matches_list) > 0:
+		for match in matches_list:
+			if prev_point > 0:
+				review = process_review( aux.sanitise_text( source[ prev_point : match.start() ] ) )
+				if review['quality'] >= quality_threshold and review['votes'] >= votes_threshold:
+					reviews.append(review)
 
-	if review['quality'] >= quality_threshold and review['votes'] >= votes_threshold:
-		reviews.append(review)
-	
+			prev_point = match.start() - 30
+		
+		review = process_review( aux.sanitise_text( source[ prev_point : ] ) )
+
+		if review['quality'] >= quality_threshold and review['votes'] >= votes_threshold:
+			reviews.append(review)
+
 	return reviews
 
 def process_review(raw_text):
@@ -154,5 +156,7 @@ def get_all_reviews():
 			get_reviews(r['movie_id'])
 			coll.update( { 'movie_id': r['movie_id'] }, { '$set': { 'status': 1 } } )
 			time.sleep( aux.get_random_sleep_time() )
+	
+	aux.log('Downloading finished successfully.')
 
-get_all_reviews()
+#get_all_reviews()
