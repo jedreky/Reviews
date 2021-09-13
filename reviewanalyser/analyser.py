@@ -5,14 +5,14 @@ This file contains functions related to analysing the reviews.
 import reviewanalyser.auxiliary_functions as aux
 import csv
 import numpy as np
-from sklearn.model_selection import train_test_split
+import sklearn.model_selection
+import sklearn.utils
+import pickle
 import tensorflow as tf
+import time
 
 from keras.models import Sequential
 from keras.layers import Dense, GRU
-
-filename = '/home/jedrek/software/ML/glove.6B/glove.6B.50d.txt.short'
-emb_dict = {}
 
 def check_score_distribution():
 	"""
@@ -24,53 +24,62 @@ def check_score_distribution():
 	count_by_score = { '$group': { '_id': '$score', 'count': { '$sum': 1 } } }
 	pipeline = [ count_by_score ]
 	results = coll.aggregate( pipeline )
-	
+
 	for r in results:
 		print(r)
 
 	client.close()
 
-def get_input_data(words = 10, emb_dim = 50, quality = 0.5):
+def get_input_data(n = 10, max_words = 10, emb_dim = 50, quality = 0.5):
 	"""
-	Returns an embedding of all the reviews from the database with at most a certain number of words and satisfying the quality threshold.
+	Returns an embedding of reviews from the database that satisfy certain criteria	(maximum number of words and minimum quality).
+	To ensure that we are training on an approximately balanced set we choose the same number of reviews (denoted by n) with each grade.
 	"""
 	client = aux.get_client()
 	coll = client['ReviewAnalyser']['reviews']
-	results = coll.find( { 'words': { '$lt': words }, 'quality': { '$gt': quality } } )
-	count = coll.count_documents( { 'words': { '$lt': words } } )
-	X = np.zeros( [ count, words, emb_dim ] )
-	y = []
-	
+
+	X = np.zeros( [ 10 * n, max_words, emb_dim ] )
+	Y = np.zeros( [ 10 * n, 1] )
+
+	with open('glove.6B/glove.6B.{}d.pickle'.format( str(emb_dim) ), 'rb') as pickle_file:
+		emb_dict = pickle.load( pickle_file )
+
 	j = 0
 
-	for r in results:
-		review_emb = convert_review( r['content'], words )
-		
-		if review_emb is not None:
-			X[j, :, :] = review_emb
-			# subtract 1 to ensure that the scores are in the range [0, 1, ..., 9]
-			y.append( r['score'] - 1 )
-			j += 1
-	
+	for score in range(1, 11):
+		results = coll.find( { 'words': { '$lt': max_words }, 'quality': { '$gt': quality }, 'score': score } )
+
+		k = 0
+		for r in results:
+			review_emb = convert_review( r['content'], max_words, emb_dict )
+
+			if review_emb is not None:
+				X[j + k, :, :] = review_emb
+				# subtract 1 to ensure that the scores are in the range [0, 1, ..., 9]
+				Y[j + k] = r['score'] - 1
+				k += 1
+
+			if k >= n:
+				j += k
+				k = 0
+				break
+
 	client.close()
 	
-	Y = np.array(y)
+	# truncate the empty rows
+	X = X[:j, :, :]
+	Y = Y[:j]
+	# shuffle the dataset
+	X, Y = sklearn.utils.shuffle(X, Y)
+
+	if j == 10 * n:
+		aux.log('A sufficient number of reviews found.')
+	else:
+		aux.log('Insufficient reviews, the resulting matrices are smaller than asked for.')
 	
-	return X[:j, : :], Y
+	return X, Y
 
-def get_embedding_dict(filename):
-	emb_dict = {}
-
-	with open(filename, 'r') as csvfile:
-		for line in csvfile:
-			vals = line.split()
-			word = vals[0]
-			vect = np.array( vals[1:], dtype = 'float32' )
-			emb_dict[word] = vect
-	
-	return emb_dict
-
-def convert_review(review, length):
+def convert_review(review, length, emb_dict):
 	# convert to lower case
 	review = review.lower()
 	
@@ -98,9 +107,9 @@ def convert_review(review, length):
 
 	return review_emb_pad
 
-def create_model(input_shape):
+def create_model(input_shape, units = 64):
 	model = Sequential()
-	model.add( GRU(64, dropout = 0.2, recurrent_dropout = 0.2, input_shape = input_shape ) )
+	model.add( GRU(units, dropout = 0.2, recurrent_dropout = 0.2, input_shape = input_shape ) )
 	model.add( Dense(10, activation = 'softmax') )
 	model.compile( loss = tf.keras.losses.SparseCategoricalCrossentropy(), optimizer = 'adam', metrics = [tf.keras.metrics.SparseCategoricalAccuracy()] )
 	return model
@@ -117,26 +126,52 @@ def check_accuracy(model, X, Y, err = 1):
 	
 	return float(count / X.shape[0])
 
-def predict_rating(model, review, length):
-	x = convert_review( review, length )
+def predict_rating(model, review, length, emb_dim):
+	with open('glove.6B/glove.6B.{}d.pickle'.format( str(emb_dim) ), 'rb') as pickle_file:
+		emb_dict = pickle.load( pickle_file )
+
+	x = convert_review( review, length, emb_dict )
 	y = model.predict( x.reshape( [1, x.shape[0], x.shape[1] ] ) )
 	print( np.round(y, 3) )
+
+def train_and_evaluate_model(model, X_train, X_test, Y_train, Y_test, time_in_mins = 60):
+	"""
+	Trains the given model for a required amount of time and evaluates its performance.
+	"""
+	aux.log('Initial accuracy: {}'.format( str( check_accuracy( model, X_test, Y_test) ) ) )
+
+	# initialise the learning procedure
+	model.fit( X_train, Y_train, epochs = 5 )
+	
+	# measure the time taken by a fixed number of iterations
+	N_test = 5
+	t0 = time.time()
+	model.fit( X_train, Y_train, epochs = N_test )
+	time_per_epoch = ( time.time() - t0 ) / ( N_test * 60 )
+	
+	N = int( time_in_mins / time_per_epoch )
+	model.fit( X_train, Y_train, epochs = N )
+	aux.log('Accuracy after training: {}'.format( str( check_accuracy( model, X_test, Y_test) ) ) )
+
+def start( n = 30, max_words = 130 ):
+	X, Y = get_input_data(n, max_words, 50, 0.5)
+	model = create_model( ( X.shape[1], X.shape[2] ) )
+	
+	return X, Y, model
+
 
 """
 Things below must be properly cleaned up.
 """
 
+
 """
-emb_dict = get_embedding_dict(filename)
-
-X, Y = get_input_data(70, 50, 0.5)
-model = create_model( ( X.shape[1], X.shape[2] ) )
-
-X_train, X_test, Y_train, Y_test = train_test_split( X, Y, test_size = 0.15 )
+X_train, X_test, Y_train, Y_test = sklearn.model_selection.train_test_split( X, Y, test_size = 0.15 )
 model.fit( X_train, Y_train, epochs = 50 )
-"""
+
 #model.fit( X_train, Y_train, validation_data = (X_test, Y_test), epochs = 100 )
 
 review1 = 'This is a truly fantastic movie and I would like to watch it again. Stefan is a great director, noone can compete with him!'
 review2 = 'This is an ok movie, but I have seen better. Moreover, it gets quite boring towards the end.'
 review3 = 'This is a completely terrible movie, I have never seen anything worst in my life.'
+"""
