@@ -5,6 +5,7 @@ This file contains some auxiliary functions of the ReviewAnalyser.
 import datetime
 import json
 import numpy as np
+import pickle
 import pymongo
 
 #######################################################
@@ -36,6 +37,20 @@ def sanitise_text(string):
 		string = string.replace(symbol, '')
 
 	return string
+
+def convert_text_to_pickle( input_file ):
+	emb_dict = {}
+
+	with open(input_file, 'r') as csv_file:
+		for line in csv_file:
+			vals = line.split()
+			word = vals[0]
+			vect = np.array( vals[1:], dtype = 'float32' )
+			emb_dict[word] = vect
+	
+	output_file = input_file[:-3] + 'pickle'
+	with open(output_file, 'wb') as pickle_file:
+		pickle.dump( emb_dict, pickle_file )
 
 def get_random_sleep_time(min_val = 3, ave_val = 8, alpha = 4):
 	"""
