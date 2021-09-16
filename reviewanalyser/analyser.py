@@ -8,11 +8,13 @@ import numpy as np
 import pickle
 import sklearn.model_selection
 import sklearn.utils
-import tensorflow as tf
 import time
 
-from keras.models import Sequential
-from keras.layers import Dense, GRU, LSTM
+from tensorflow.keras.layers import Dense, GRU, LSTM
+from tensorflow.keras.losses import SparseCategoricalCrossentropy
+from tensorflow.keras.metrics import SparseCategoricalAccuracy
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
 import reviewanalyser.auxiliary_functions as aux
 import reviewanalyser.config as config
@@ -142,12 +144,12 @@ def create_model(input_shape, params):
 	if params['layer'] == 'GRU':
 		model.add( GRU(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
 	elif params['layer'] == 'LSTM':
-		model.add( LSTM(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'] ) )
+		model.add( LSTM(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
 	else:
 		aux.log('Warning: the layer should be either GRU or LSTM')
 
 	model.add( Dense(10, activation = 'softmax') )
-	model.compile( loss = tf.keras.losses.SparseCategoricalCrossentropy(), optimizer = 'adam', metrics = [tf.keras.metrics.SparseCategoricalAccuracy()] )
+	model.compile( loss = SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [SparseCategoricalAccuracy()] )
 	return model
 
 def check_accuracy(model, X, Y, err = 1):
@@ -193,11 +195,12 @@ def train_and_evaluate_model(model, data_file, time_in_hrs):
 	aux.log('Accuracy after training: {}'.format( str( final_accuracy ) ) )
 	return hist, init_accuracy, final_accuracy
 
-def generate_params(layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2):
+def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2):
 	"""
 	Generates a default set of parameters.
 	"""
 	params = {}
+	params['learning_rate'] = learning_rate
 	params['layer'] = layer
 	params['units'] = units
 	params['dropout'] = dropout
@@ -210,6 +213,7 @@ def plot_performance( model_name, train_loss, test_loss ):
 	plt.legend( loc = 'right' )
 	plt.title('Training performance for {}'.format(model_name))
 	plt.savefig('results/{}.png'.format(model_name))
+	plt.close()
 
 def test_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 	"""
