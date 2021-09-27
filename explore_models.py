@@ -1,24 +1,32 @@
+"""
+This files explores a family of models by optimising them for a specified amount of time.
+We assume that the training data has already been generated and stored in an .npz file.
+"""
+
 import reviewanalyser.analyser as analyser
 import reviewanalyser.auxiliary_functions as aux
 import reviewanalyser.config as config
 
 test_mode = True
+# The maximal length of a review
 max_words = 150
 
+# The following lists represent various options explored in the full mode
 learning_rates = (0.0005, 0.001, 0.002)
 layers = ('GRU', 'LSTM')
 units_options = (32, 64, 128)
-training_time = 1/600
+training_time_test_mode = 1/300
+training_time_full_mode = 1/600
 
-print('In test mode you optimise a single model.')
+print('In test mode we optimise a single model.')
 n = len( config.emb_dims ) * len( learning_rates ) * len( layers ) * len( units_options )
-print('In full mode you optimise {} distinct models.'.format(n))
+print('In full mode we optimise {} distinct models.'.format(n))
 
 if test_mode:
-	model_name = 'test_model171'
+	model_name = 'test_model163'
 	input_shape = ( max_words, config.emb_dims[0] )
 	params = analyser.generate_params()
-	analyser.test_model( model_name, input_shape, params, 1/60 )
+	hist = analyser.explore_model( model_name, input_shape, params, training_time_test_mode )
 else:
 	for emb_dim in config.emb_dims:
 		input_shape = ( max_words, emb_dim )
@@ -31,4 +39,4 @@ else:
 					count = coll.count_documents({}) + 1
 					model_name = 'model{}'.format(count)
 					params = analyser.generate_params(learning_rate, layer, units)
-					analyser.test_model( model_name, input_shape, params, training_time )
+					analyser.explore_model( model_name, input_shape, params, training_time_full_mode )

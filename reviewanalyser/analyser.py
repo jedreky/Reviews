@@ -41,7 +41,8 @@ def check_score_distribution():
 def get_input_data(n, max_words, emb_dim, quality):
 	"""
 	Returns an embedding of reviews from the database that satisfy certain criteria	(maximum number of words and minimum quality).
-	To ensure that we are training on an approximately balanced set we choose the same number of reviews (denoted by n) with each grade.
+	To ensure that we are training on a balanced set we choose the same number of reviews (denoted by n) with each grade.
+	In the last step the reviews are randomly permuted.
 	"""
 	client = aux.get_client()
 	coll = client['ReviewAnalyser']['reviews']
@@ -90,6 +91,9 @@ def get_input_data(n, max_words, emb_dim, quality):
 	return X, Y
 
 def save_input_data_to_file(filename, n, max_words, emb_dim, quality):
+	"""
+	Generates training data for a fixed embedding dimension and saves it to an .npz file.
+	"""
 	X, Y = get_input_data(n, max_words, emb_dim, quality)
 	X_train, X_test, Y_train, Y_test = sklearn.model_selection.train_test_split( X, Y, test_size = 0.15 )
 
@@ -98,13 +102,16 @@ def save_input_data_to_file(filename, n, max_words, emb_dim, quality):
 
 def generate_input_data_files(filename, n = 15, max_words = 150, quality = 0.5):
 	"""
-	asd
+	Generates training data for all valid embedding dimensions and saves them to .npz files.
 	"""
 	for emb_dim in config.emb_dims:
 		save_input_data_to_file( filename + str(emb_dim), n, max_words, emb_dim, quality)
 
 
 def convert_review(review, length, emb_dict):
+	"""
+	Converts a review into its embedding.
+	"""
 	# convert to lower case
 	review = review.lower()
 	
@@ -133,13 +140,18 @@ def convert_review(review, length, emb_dict):
 	return review_emb_pad
 
 def load_data(data_file):
+	"""
+	Loads data from an .npz file.
+	"""
 	data = np.load(data_file)
 	return data['X_train'], data['X_test'], data['Y_train'], data['Y_test']
-
 #######################################################
 # Functions related to ML models
 #######################################################
 def create_model(input_shape, params):
+	"""
+	Creates a recurrent neural network according to the specified parameters.
+	"""
 	model = Sequential()
 	if params['layer'] == 'GRU':
 		model.add( GRU(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
@@ -165,6 +177,9 @@ def check_accuracy(model, X, Y, err = 1):
 	return float(count / X.shape[0])
 
 def predict_rating(model, review, length, emb_dim):
+	"""
+	Given a model and a review returns the prediction.
+	"""
 	with open('glove.6B/glove.6B.{}d.pickle'.format( str(emb_dim) ), 'rb') as pickle_file:
 		emb_dict = pickle.load( pickle_file )
 
@@ -207,18 +222,25 @@ def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 
 	params['recurrent_dropout'] = recurrent_dropout
 	return params
 
-def plot_performance( model_name, train_loss, test_loss ):
-	plt.plot( train_loss, label = 'Train set loss' )
-	plt.plot( test_loss, label = 'Test set loss' )
-	plt.legend( loc = 'right' )
-	plt.title('Training performance for {}'.format(model_name))
-	plt.savefig('results/{}.png'.format(model_name))
+def plot_performance( model_name, history ):
+	"""
+	Given the history of a training process generates a plot of the loss and accuracy as a function of time, which is saved as an external file.
+	"""
+	fig, axs = plt.subplots(2)
+	fig.suptitle('Training performance for {}'.format(model_name))
+	axs[0].plot( history['loss'], label = 'Train set loss' )
+	axs[0].plot( history['val_loss'], label = 'Test set loss' )
+	axs[0].legend( loc = 'right' )
+	axs[1].plot( history['sparse_categorical_accuracy'], label = 'Train set accuracy' )
+	axs[1].plot( history['val_sparse_categorical_accuracy'], label = 'Test set accuracy' )
+	axs[1].legend( loc = 'right' )
+	fig.savefig('results/{}.png'.format(model_name))
 	plt.close()
 
-def test_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
+def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 	"""
-	Creates a model according to the specification, train it for a specified amount of time
-	(specified in hours) and evaluates the results.
+	Creates a model according to the specification, trains it for a specified amount of time
+	(specified in hours) and evaluates the results. The results are plotted as well as saved in the database.
 	"""
 	if input_shape[1] in config.emb_dims:
 		data_file = 'data/data{}d.npz'.format( input_shape[1] )
@@ -227,7 +249,7 @@ def test_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 		hist, init_accuracy, final_accuracy = train_and_evaluate_model(model, data_file, time_in_hrs)
 		model.save('results/' + model_name + '_final.h5')
 		# Plot the training performance
-		plot_performance( model_name, hist.history['loss'], hist.history['val_loss'] )
+		plot_performance( model_name, hist.history )
 		# Store information about the training in the database
 		client = aux.get_client()
 		coll = client['ReviewAnalyser']['results']
@@ -238,17 +260,7 @@ def test_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 		record['training_time'] = time_in_hrs
 		coll.insert_one( record )
 		client.close()
+		return hist
 		
 	else:
 		aux.log('The embedding dimension must be chosen from the following list: {}'.format(emb_dims))
-
-"""
-Things below must be properly cleaned up.
-"""
-
-
-"""
-review1 = 'This is a truly fantastic movie and I would like to watch it again. Stefan is a great director, noone can compete with him!'
-review2 = 'This is an ok movie, but I have seen better. Moreover, it gets quite boring towards the end.'
-review3 = 'This is a completely terrible movie, I have never seen anything worst in my life.'
-"""
