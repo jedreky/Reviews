@@ -18,18 +18,19 @@ units_options = (32, 64, 128)
 n = len( config.emb_dims ) * len( learning_rates ) * len( layers ) * len( units_options )
 
 training_time_test_mode = 1/60
+training_time_partial_mode = 1
 training_time_full_mode = 1/60
 
 print('\nIn test mode we optimise a single model.')
 print('In full mode we optimise {} distinct models.\n'.format(n))
 
-if mode = 'test':
+if mode == 'test':
 	model_name = 'test_model163'
 	input_shape = ( max_words, config.emb_dims[0] )
 	params = analyser.generate_params()
 	hist = analyser.explore_model( model_name, input_shape, params, training_time_test_mode )
 	
-elif mode = 'partial':
+elif mode == 'partial':
 	input_shape = ( max_words, config.emb_dims[0] )
 	layer = layers[0]
 	units = units_options[0]
@@ -40,9 +41,9 @@ elif mode = 'partial':
 		count = coll.count_documents({}) + 1
 		model_name = 'model{}'.format(count)
 		params = analyser.generate_params(learning_rate, layer, units)
-		analyser.explore_model( model_name, input_shape, params, training_time_full_mode )
+		analyser.explore_model( model_name, input_shape, params, training_time_partial_mode )
 
-elif mode = 'full':
+elif mode == 'full':
 	for emb_dim in config.emb_dims:
 		input_shape = ( max_words, emb_dim )
 
