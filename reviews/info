@@ -1,0 +1,5 @@
+X.shape = (# of examples, max_words, emb_dim )
+
+from tensorflow.keras.models import load_model
+
+------------------------------------------------------
