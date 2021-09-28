@@ -10,9 +10,10 @@ import sklearn.model_selection
 import sklearn.utils
 import time
 
+import tensorflow
 from tensorflow.keras.layers import Dense, GRU, LSTM
-from tensorflow.keras.losses import SparseCategoricalCrossentropy
-from tensorflow.keras.metrics import SparseCategoricalAccuracy
+#from tensorflow.keras.losses import MeanSquaredError, SparseCategoricalCrossentropy
+#from tensorflow.keras.metrics import MeanSquaredError, SparseCategoricalAccuracy
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
@@ -158,8 +159,13 @@ def create_model(input_shape, params):
 	else:
 		aux.log('Warning: the layer should be either GRU or LSTM')
 
-	model.add( Dense(10, activation = 'softmax') )
-	model.compile( loss = SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [SparseCategoricalAccuracy()] )
+	# TODO: add a nice way of specifying whether we should go for categorical or numerical model
+	# it seems that numerical makes much more sense and then there is no need to compute the metric, because it's the same
+	#model.add( Dense(10, activation = 'softmax') )
+	#model.compile( loss = tensorflow.keras.losses.SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [tensorflow.keras.metrics.SparseCategoricalAccuracy()] )
+	model.add( Dense(1, activation = None) )
+	model.compile( loss = tensorflow.keras.losses.MeanSquaredError(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [tensorflow.keras.metrics.MeanSquaredError()] )
+	
 	return model
 
 def check_accuracy(model, X, Y, err = 1):
@@ -228,9 +234,16 @@ def plot_performance( model_name, history ):
 	axs[0].plot( history['loss'], label = 'Train set loss' )
 	axs[0].plot( history['val_loss'], label = 'Test set loss' )
 	axs[0].legend( loc = 'right' )
+
+	# adjust the name of the metric depending on the model type
+	if 'sparse_categorical_accuracy' in history.keys():
+		acc = 'sparse_categorical_accuracy'
+	else:
+		acc = 'mean_squared_error'
+
 	# the accuracy plotted here is some kind of average, I am not sure if we should include it
-	axs[1].plot( history['sparse_categorical_accuracy'], label = 'Train set accuracy' )
-	axs[1].plot( history['val_sparse_categorical_accuracy'], label = 'Test set accuracy' )
+	axs[1].plot( history[acc], label = 'Train set accuracy' )
+	axs[1].plot( history['val_' + acc], label = 'Test set accuracy' )
 	axs[1].legend( loc = 'right' )
 	fig.savefig('results/{}.png'.format(model_name))
 	plt.close()

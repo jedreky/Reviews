@@ -7,7 +7,7 @@ import reviews.analyser as analyser
 import reviews.auxiliary_functions as aux
 import reviews.config as config
 
-mode = 'partial'
+mode = 'test'
 # The maximal length of a review
 max_words = 150
 
