@@ -33,6 +33,7 @@ def get_movies_from_genre(genre, n):
 
 	coll.insert_many(movies)
 	client.close()
+	aux.log('Successfully imported {} movies from genre: {}.'.format( len(movies), genre ) )
 
 def check_for_duplicates(collection, field):
 	"""
@@ -144,7 +145,7 @@ def process_review(raw_text):
 
 def get_all_reviews():
 	"""
-	Downloads reviews for all the movies in the database.
+	Downloads reviews for all the movies in the database whose status is 0 (unprocessed).
 	"""
 	client = aux.get_client()
 	coll = client['ReviewAnalyser']['movies']
