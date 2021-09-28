@@ -1,5 +1,5 @@
 """
-This file contains some auxiliary functions of the ReviewAnalyser.
+This file contains some auxiliary functions of the Reviews package.
 """
 
 import datetime
@@ -7,6 +7,8 @@ import json
 import numpy as np
 import pickle
 import pymongo
+
+import reviews.config as config
 
 #######################################################
 # Short functions
@@ -60,11 +62,12 @@ def get_random_sleep_time(min_val = 3, ave_val = 8, alpha = 4):
 	return np.max( [ min_val, ave_val + alpha * rng.standard_normal() ] )
 
 
-def get_client():
+def get_collection(name):
 	"""
-	Returns a MongoClient.
+	Returns a collection and a MongoClient (so that we can close the connection afterwards).
 	"""
 	with open('mongo_keys.json', 'r') as json_file:
 		mongo_keys = json.load(json_file)
 		client = pymongo.MongoClient( username = mongo_keys[0], password = mongo_keys[1] )
-		return client
+		coll = client[config.database_name][name]
+		return coll, client

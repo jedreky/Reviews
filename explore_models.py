@@ -3,9 +3,9 @@ This files explores a family of models by optimising them for a specified amount
 We assume that the training data has already been generated and stored in an .npz file.
 """
 
-import reviewanalyser.analyser as analyser
-import reviewanalyser.auxiliary_functions as aux
-import reviewanalyser.config as config
+import reviews.analyser as analyser
+import reviews.auxiliary_functions as aux
+import reviews.config as config
 
 mode = 'partial'
 # The maximal length of a review
@@ -37,7 +37,7 @@ elif mode == 'partial':
 
 	for learning_rate in learning_rates:
 		client = aux.get_client()
-		coll = client['ReviewAnalyser']['results']
+		coll = client['Reviews']['results']
 		count = coll.count_documents({}) + 1
 		model_name = 'model{}'.format(count)
 		params = analyser.generate_params(learning_rate, layer, units)
@@ -51,7 +51,7 @@ elif mode == 'full':
 			for layer in layers:
 				for units in units_options:
 					client = aux.get_client()
-					coll = client['ReviewAnalyser']['results']
+					coll = client['Reviews']['results']
 					count = coll.count_documents({}) + 1
 					model_name = 'model{}'.format(count)
 					params = analyser.generate_params(learning_rate, layer, units)

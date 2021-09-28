@@ -2,7 +2,7 @@
 This files takes data from the database and generates an appropriate .npz file.
 """
 
-import reviewanalyser.analyser as analyser
+import reviews.analyser as analyser
 
 filename = 'data'
 n = 20

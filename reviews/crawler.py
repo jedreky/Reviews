@@ -2,7 +2,7 @@
 This file contains functions related to crawling the IMDB website, extracting reviews and storing them in a Mongo database.
 """
 
-import reviewanalyser.auxiliary_functions as aux
+import reviews.auxiliary_functions as aux
 import json
 import numpy as np
 import re
@@ -15,8 +15,7 @@ def get_movies_from_genre(genre, n):
 	"""
 	movies = []
 
-	client = aux.get_client()
-	coll = client['ReviewAnalyser']['movies']
+	coll, client = aux.get_collection('movies')
 
 	k = 1
 	while n > len(movies):
@@ -39,8 +38,7 @@ def check_for_duplicates(collection, field):
 	"""
 	Checks whether in a given collection there are entries with identical values of the field.
 	"""
-	client = aux.get_client()
-	coll = client['ReviewAnalyser'][collection]
+	coll, client = aux.get_collection(collection)
 	
 	count_by_id = { '$group': { '_id': '$' + field, 'count': { '$sum': 1 } } }
 	
@@ -69,8 +67,7 @@ def get_reviews(movie_id):
 	source = get_website_source(url)
 	reviews = extract_reviews(source)
 	
-	client = aux.get_client()
-	coll = client['ReviewAnalyser']['reviews']
+	coll, client = aux.get_collection('reviews')
 	
 	for review in reviews:
 		# check if the review is not already in the database to avoid duplicates
@@ -146,9 +143,9 @@ def process_review(raw_text):
 def get_all_reviews():
 	"""
 	Downloads reviews for all the movies in the database whose status is 0 (unprocessed).
+	Recall that we only download reviews visible on the first page.
 	"""
-	client = aux.get_client()
-	coll = client['ReviewAnalyser']['movies']
+	coll, client = aux.get_collection('movies')
 	results = coll.find()
 
 	for r in results:
@@ -158,4 +155,5 @@ def get_all_reviews():
 			coll.update( { 'movie_id': r['movie_id'] }, { '$set': { 'status': 1 } } )
 			time.sleep( aux.get_random_sleep_time() )
 	
+	client.close()
 	aux.log('Downloading finished successfully.')

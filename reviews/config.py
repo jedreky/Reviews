@@ -2,6 +2,9 @@
 This file sets some global variables.
 """
 
+# Name of the Mongo database
+database_name = 'Reviews'
+
 # Valid embedding dimensions
 emb_dims = ( 50, 100, 200, 300 )
 

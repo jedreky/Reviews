@@ -16,8 +16,8 @@ from tensorflow.keras.metrics import SparseCategoricalAccuracy
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
-import reviewanalyser.auxiliary_functions as aux
-import reviewanalyser.config as config
+import reviews.auxiliary_functions as aux
+import reviews.config as config
 
 #######################################################
 # Functions related to data verification and processing
@@ -26,9 +26,8 @@ def check_score_distribution():
 	"""
 	Checks the distribution of scores in the reviews database.
 	"""
-	client = aux.get_client()
-	coll = client['ReviewAnalyser']['reviews']
-	
+	coll, client = aux.get_collection('reviews')
+
 	count_by_score = { '$group': { '_id': '$score', 'count': { '$sum': 1 } } }
 	pipeline = [ count_by_score ]
 	results = coll.aggregate( pipeline )
@@ -44,8 +43,7 @@ def get_input_data(n, max_words, emb_dim, quality):
 	To ensure that we are training on a balanced set we choose the same number of reviews (denoted by n) with each grade.
 	In the last step the reviews are randomly permuted.
 	"""
-	client = aux.get_client()
-	coll = client['ReviewAnalyser']['reviews']
+	coll, client = aux.get_collection('reviews')
 
 	X = np.zeros( [ 10 * n, max_words, emb_dim ] )
 	Y = np.zeros( [ 10 * n, 1] )
@@ -251,8 +249,7 @@ def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 		# Plot the training performance
 		plot_performance( model_name, hist.history )
 		# Store information about the training in the database
-		client = aux.get_client()
-		coll = client['ReviewAnalyser']['results']
+		coll, client = aux.get_collection('results')
 		record = params
 		record['model_name'] = model_name
 		record['init_accuracy'] = init_accuracy

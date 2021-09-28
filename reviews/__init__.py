@@ -1,2 +1,2 @@
-import reviewanalyser.analyser
-import reviewanalyser.crawler
+import reviews.analyser
+import reviews.crawler

@@ -2,9 +2,9 @@
 This file contains some simple procedures for downloading reviews.
 """
 
-import reviewanalyser.crawler as crawler
+import reviews.crawler as crawler
 
-n = 10000
+n = 10
 genres = ('action', 'adventure', 'thriller')
 
 #for genre in genres:
