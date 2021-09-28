@@ -100,7 +100,7 @@ def save_input_data_to_file(filename, n, max_words, emb_dim, quality):
 	with open('data/{}d.npz'.format( filename ), 'wb') as data_file:
 		np.savez(data_file, X_train = X_train, X_test = X_test, Y_train = Y_train, Y_test = Y_test)
 
-def generate_input_data_files(filename, n = 15, max_words = 150, quality = 0.5):
+def generate_input_data(filename, n = 15, max_words = 150, quality = 0.5):
 	"""
 	Generates training data for all valid embedding dimensions and saves them to .npz files.
 	"""
@@ -166,14 +166,14 @@ def create_model(input_shape, params):
 
 def check_accuracy(model, X, Y, err = 1):
 	"""
-	Returns the fraction of examples for which the returned score is close to the true score.
+	Returns the fraction of examples for which the returned score is close up to some fixed error to the true score.
 	"""
 	count = 0
 	for j in range( X.shape[0] ):
 		Y_pred = np.argmax( model.predict( X[j].reshape( [1, X.shape[1], X.shape[2]] ) ) )
 		if np.abs( Y_pred - Y[j] ) <= err:
 			count += 1
-	
+
 	return float(count / X.shape[0])
 
 def predict_rating(model, review, length, emb_dim):
@@ -189,22 +189,21 @@ def predict_rating(model, review, length, emb_dim):
 
 def train_and_evaluate_model(model, data_file, time_in_hrs):
 	"""
-	Trains the given model for a required amount of time and evaluates its performance.
+	Trains the given model for a required amount of time and evaluates its performance on the test set.
 	"""
 	X_train, X_test, Y_train, Y_test = load_data(data_file)
-	init_accuracy = check_accuracy( model, X_test, Y_test)
+	init_accuracy = check_accuracy( model, X_test, Y_test )
 
 	# initialise the learning procedure
 	model.fit( X_train, Y_train, epochs = 5 )
 	
 	# measure the time taken by a fixed number of iterations
-	N_test = 5
 	t0 = time.time()
-	model.fit( X_train, Y_train, epochs = N_test )
-	time_per_epoch = ( time.time() - t0 ) / ( N_test * config.secs_in_hr )
+	model.fit( X_train, Y_train, epochs = config.N_test )
+	time_per_epoch = ( time.time() - t0 ) / ( config.N_test * config.secs_in_hr )
 	
 	N = int( time_in_hrs / time_per_epoch )
-	hist = model.fit( X_train, Y_train, epochs = N, validation_data= ( X_test, Y_test ) )
+	hist = model.fit( X_train, Y_train, epochs = N, validation_data = ( X_test, Y_test ) )
 	final_accuracy = check_accuracy( model, X_test, Y_test)
 	aux.log('Initial accuracy: {}'.format( str( init_accuracy ) ) )
 	aux.log('Accuracy after training: {}'.format( str( final_accuracy ) ) )
@@ -231,6 +230,7 @@ def plot_performance( model_name, history ):
 	axs[0].plot( history['loss'], label = 'Train set loss' )
 	axs[0].plot( history['val_loss'], label = 'Test set loss' )
 	axs[0].legend( loc = 'right' )
+	# the accuracy plotted here is some kind of average, I am not sure if we should include it
 	axs[1].plot( history['sparse_categorical_accuracy'], label = 'Train set accuracy' )
 	axs[1].plot( history['val_sparse_categorical_accuracy'], label = 'Test set accuracy' )
 	axs[1].legend( loc = 'right' )
@@ -240,7 +240,7 @@ def plot_performance( model_name, history ):
 def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 	"""
 	Creates a model according to the specification, trains it for a specified amount of time
-	(specified in hours) and evaluates the results. The results are plotted as well as saved in the database.
+	(specified in hours) and evaluates the results on the test set. The results are plotted as well as saved in the database.
 	"""
 	if input_shape[1] in config.emb_dims:
 		data_file = 'data/data{}d.npz'.format( input_shape[1] )
@@ -257,6 +257,13 @@ def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 		record['model_name'] = model_name
 		record['init_accuracy'] = init_accuracy
 		record['final_accuracy'] = final_accuracy
+		record['accuracy_increase'] = final_accuracy - init_accuracy
+
+		if init_accuracy > 0:
+			record['accuracy_ratio'] = final_accuracy / init_accuracy
+		else:
+			record['accuracy_ratio'] = config.max_accuracy
+
 		record['training_time'] = time_in_hrs
 		coll.insert_one( record )
 		client.close()

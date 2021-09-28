@@ -7,18 +7,18 @@ import reviewanalyser.analyser as analyser
 import reviewanalyser.auxiliary_functions as aux
 import reviewanalyser.config as config
 
-test_mode = True
+test_mode = False
 # The maximal length of a review
 max_words = 150
 
 # The following lists represent various options explored in the full mode
 learning_rates = (0.0005, 0.001, 0.002)
 layers = ('GRU', 'LSTM')
-units_options = (32, 64, 128)
+units_options = (32, 64)#, 128)
 n = len( config.emb_dims ) * len( learning_rates ) * len( layers ) * len( units_options )
 
-training_time_test_mode = 1/300
-training_time_full_mode = 1/600
+training_time_test_mode = 1/60
+training_time_full_mode = 1/60
 
 print('\nIn test mode we optimise a single model.')
 print('In full mode we optimise {} distinct models.\n'.format(n))
