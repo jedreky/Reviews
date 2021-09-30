@@ -2,17 +2,20 @@
 This file contains functions related to crawling the IMDB website, extracting reviews and storing them in a Mongo database.
 """
 
-import reviews.auxiliary_functions as aux
 import json
 import numpy as np
 import re
 import requests
 import time
 
+import reviews.auxiliary_functions as aux
+import reviews.config as config
+
 def get_movies_from_genre(genre, n):
 	"""
 	Finds at least n new movies from the given genre and adds them to the database.
 	"""
+	# create an empty list of movies to add
 	movies = []
 
 	coll, client = aux.get_collection('movies')
@@ -24,19 +27,25 @@ def get_movies_from_genre(genre, n):
 		matches = re.finditer('href="/title/(.{,10})/\?ref_=adv_li_i', source)
 	
 		for match in matches:
-			if coll.count_documents( {'movie_id': match.group(1) } ) == 0:
-				movies.append( { 'movie_id': match.group(1), 'genre': genre, 'status': 0 } )
+			movie_id = match.group(1)
+			
+			# check if the movie already appears in the database
+			if coll.count_documents( {'movie_id': movie_id } ) == 0:
+				# create a simple dictionary and add to the list
+				movies.append( { 'movie_id': movie_id, 'genre': genre, 'status': 0 } )
 			else:
 				aux.log('This movie already exists in the database: movie_id = {}.'.format( match.group(1) ))
-		k += 50
+		# increase the counter by the number of movies on each page
+		k += config.movies_per_page
 
 	coll.insert_many(movies)
 	client.close()
 	aux.log('Successfully imported {} movies from genre: {}.'.format( len(movies), genre ) )
 
-def check_for_duplicates(collection, field):
+def check_for_duplicates(collection, field, remove_duplicates = False):
 	"""
 	Checks whether in a given collection there are entries with identical values of the field.
+	If specified, remove all but one.
 	"""
 	coll, client = aux.get_collection(collection)
 	
@@ -50,7 +59,23 @@ def check_for_duplicates(collection, field):
 
 	for r in results:
 		if r['count'] > 1:
-			aux.log('Duplicates for: {} = {}'.format(field, r['_id']))
+			movie_id = r['_id']
+			aux.log('Duplicates found for: {} = {}'.format(field, movie_id))
+
+			if remove_duplicates:
+				# find all the duplicates
+				records = coll.find( {'movie_id': movie_id} )
+				# save the first record to add it back later
+				record = records[0]
+				# remove the _id key of the record (we do not need it)
+				del( record['_id'] )
+				# remove all the duplicates
+				coll.delete_many( {'movie_id': movie_id} )
+				# add the record back in
+				coll.insert_one( record )
+				
+				aux.log('Duplicates removed for: {} = {}'.format(field, r['_id']))
+
 			duplicate_count += 1
 	
 	if duplicate_count == 0:
@@ -146,14 +171,15 @@ def get_all_reviews():
 	Recall that we only download reviews visible on the first page.
 	"""
 	coll, client = aux.get_collection('movies')
-	results = coll.find()
+	# find movies which have not been processed yet
+	results = coll.find( {'status': 0} )
 
 	for r in results:
-		if r['status'] == 0:
-			aux.log('Downloading reviews for movie_id = {}'.format(r['movie_id']))
-			get_reviews(r['movie_id'])
-			coll.update( { 'movie_id': r['movie_id'] }, { '$set': { 'status': 1 } } )
-			time.sleep( aux.get_random_sleep_time() )
+		movie_id = r['movie_id']
+		aux.log('Downloading reviews for movie_id = {}'.format(movie_id))
+		get_reviews(movie_id)
+		coll.update( { 'movie_id': movie_id }, { '$set': { 'status': 1 } } )
+		#time.sleep( aux.get_random_sleep_time() )
 	
 	client.close()
 	aux.log('Downloading finished successfully.')
