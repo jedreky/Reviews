@@ -152,19 +152,24 @@ def create_model(input_shape, params):
 	Creates a recurrent neural network according to the specified parameters.
 	"""
 	model = Sequential()
+
 	if params['layer'] == 'GRU':
 		model.add( GRU(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
 	elif params['layer'] == 'LSTM':
 		model.add( LSTM(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
 	else:
-		aux.log('Warning: the layer should be either GRU or LSTM')
+		aux.log('Warning: invalid value of the the layer parameter.')
 
-	# TODO: add a nice way of specifying whether we should go for categorical or numerical model
 	# it seems that numerical makes much more sense and then there is no need to compute the metric, because it's the same
-	#model.add( Dense(10, activation = 'softmax') )
-	#model.compile( loss = tensorflow.keras.losses.SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [tensorflow.keras.metrics.SparseCategoricalAccuracy()] )
-	model.add( Dense(1, activation = None) )
-	model.compile( loss = tensorflow.keras.losses.MeanSquaredError(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [tensorflow.keras.metrics.MeanSquaredError()] )
+	if params['predictor'] == 'numerical':
+		model.add( Dense(1, activation = None) )
+		model.compile( loss = tensorflow.keras.losses.MeanSquaredError(), optimizer = Adam( learning_rate = params['learning_rate'] ) )
+	elif params['predictor'] == 'categorical':	
+		model.add( Dense(10, activation = 'softmax') )
+		model.compile( loss = tensorflow.keras.losses.SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [tensorflow.keras.metrics.SparseCategoricalAccuracy()] )
+	else:
+		aux.log('Warning: invalid value of the the predictor parameter.')
+
 	
 	return model
 
@@ -172,9 +177,18 @@ def check_accuracy(model, X, Y, err = 1):
 	"""
 	Returns the fraction of examples for which the returned score is close up to some fixed error to the true score.
 	"""
+	# By looking at the number of units in the final layer determine whether the model is numerical or categorical.
+	# Based on this define how to interpret the prediction.
+	if model.layers[1].units == 1:
+		interpret = lambda x : x
+	elif model.layers[1].units == 10:
+		interpret = lambda x : np.argmax(x)
+	else:
+		aux.log('Warning: the model is neither numerical nor categorical.')
+	
 	count = 0
 	for j in range( X.shape[0] ):
-		Y_pred = np.argmax( model.predict( X[j].reshape( [1, X.shape[1], X.shape[2]] ) ) )
+		Y_pred = interpret( model.predict( X[j].reshape( [1, X.shape[1], X.shape[2]] ) ) )
 		if np.abs( Y_pred - Y[j] ) <= err:
 			count += 1
 
@@ -213,7 +227,7 @@ def train_and_evaluate_model(model, data_file, time_in_hrs):
 	aux.log('Accuracy after training: {}'.format( str( final_accuracy ) ) )
 	return hist, init_accuracy, final_accuracy
 
-def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2):
+def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2, predictor = 'numerical'):
 	"""
 	Generates a default set of parameters.
 	"""
@@ -223,6 +237,7 @@ def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 
 	params['units'] = units
 	params['dropout'] = dropout
 	params['recurrent_dropout'] = recurrent_dropout
+	params['predictor'] = predictor
 	return params
 
 def plot_performance( model_name, history ):
@@ -235,16 +250,12 @@ def plot_performance( model_name, history ):
 	axs[0].plot( history['val_loss'], label = 'Test set loss' )
 	axs[0].legend( loc = 'right' )
 
-	# adjust the name of the metric depending on the model type
+	# if categorical plot the accuracy
 	if 'sparse_categorical_accuracy' in history.keys():
-		acc = 'sparse_categorical_accuracy'
-	else:
-		acc = 'mean_squared_error'
-
-	# the accuracy plotted here is some kind of average, I am not sure if we should include it
-	axs[1].plot( history[acc], label = 'Train set accuracy' )
-	axs[1].plot( history['val_' + acc], label = 'Test set accuracy' )
-	axs[1].legend( loc = 'right' )
+		# the accuracy plotted here is some kind of average, I am not sure if we should include it
+		axs[1].plot( history['sparse_categorical_accuracy'], label = 'Train set accuracy' )
+		axs[1].plot( history['val_sparse_categorical_accuracy'], label = 'Test set accuracy' )
+		axs[1].legend( loc = 'right' )
 	fig.savefig('results/{}.png'.format(model_name))
 	plt.close()
 

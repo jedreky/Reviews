@@ -17,7 +17,7 @@ layers = ('GRU', 'LSTM')
 units_options = (32, 64, 128)
 n = len( config.emb_dims ) * len( learning_rates ) * len( layers ) * len( units_options )
 
-training_time_test_mode = 1/60
+training_time_test_mode = 1/600
 training_time_partial_mode = 1
 training_time_full_mode = 1/60
 
@@ -27,7 +27,7 @@ print('In full mode we optimise {} distinct models.\n'.format(n))
 if mode == 'test':
 	model_name = 'test_model163'
 	input_shape = ( max_words, config.emb_dims[0] )
-	params = analyser.generate_params()
+	params = analyser.generate_params( predictor = 'numerical' )
 	hist = analyser.explore_model( model_name, input_shape, params, training_time_test_mode )
 	
 elif mode == 'partial':
