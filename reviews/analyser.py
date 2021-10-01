@@ -166,16 +166,15 @@ def create_model(input_shape, params):
 		model.compile( loss = tensorflow.keras.losses.MeanSquaredError(), optimizer = Adam( learning_rate = params['learning_rate'] ) )
 	elif params['predictor'] == 'categorical':	
 		model.add( Dense(10, activation = 'softmax') )
-		model.compile( loss = tensorflow.keras.losses.SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ), metrics = [tensorflow.keras.metrics.SparseCategoricalAccuracy()] )
+		model.compile( loss = tensorflow.keras.losses.SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ) )
 	else:
 		aux.log('Warning: invalid value of the the predictor parameter.')
-
 	
 	return model
 
 def check_accuracy(model, X, Y, err = 1):
 	"""
-	Returns the fraction of examples for which the returned score is close up to some fixed error to the true score.
+	Returns the fraction of examples for which the returned score is close to the true score up to the specified additive error.
 	"""
 	# By looking at the number of units in the final layer determine whether the model is numerical or categorical.
 	# Based on this define how to interpret the prediction.
@@ -187,8 +186,10 @@ def check_accuracy(model, X, Y, err = 1):
 		aux.log('Warning: the model is neither numerical nor categorical.')
 	
 	count = 0
+
 	for j in range( X.shape[0] ):
 		Y_pred = interpret( model.predict( X[j].reshape( [1, X.shape[1], X.shape[2]] ) ) )
+
 		if np.abs( Y_pred - Y[j] ) <= err:
 			count += 1
 
@@ -205,16 +206,32 @@ def predict_rating(model, review, length, emb_dim):
 	y = model.predict( x.reshape( [1, x.shape[0], x.shape[1] ] ) )
 	print( np.round(y, 3) )
 
-def train_and_evaluate_model(model, data_file, time_in_hrs):
+def train_and_evaluate_model(model_name, model, data_file, time_in_secs):
 	"""
 	Trains the given model for a required amount of time and evaluates its performance on the test set.
 	"""
 	X_train, X_test, Y_train, Y_test = load_data(data_file)
-	init_accuracy = check_accuracy( model, X_test, Y_test )
-
-	# initialise the learning procedure
-	model.fit( X_train, Y_train, epochs = 5 )
+	train_loss = []
+	test_loss = []
+	train_accuracy = []
+	test_accuracy = []
 	
+	# compute the initial accuracy of the model
+	train_accuracy.append( check_accuracy( model, X_train, Y_train ) )
+	test_accuracy.append( check_accuracy( model, X_test, Y_test ) )
+
+	# start the clock
+	t0 = time.time()
+
+	while time.time() - t0 < time_in_secs:
+		hist = model.fit( X_train, Y_train, epochs = config.N_epochs, validation_data = ( X_test, Y_test ) )
+		model.save('results/' + model_name + '_final.h5')
+		train_loss += hist.history['loss']
+		test_loss += hist.history['val_loss']
+		train_accuracy.append( check_accuracy( model, X_train, Y_train ) )
+		test_accuracy.append( check_accuracy( model, X_test, Y_test ) )
+		
+	"""	
 	# measure the time taken by a fixed number of iterations
 	t0 = time.time()
 	model.fit( X_train, Y_train, epochs = config.N_test )
@@ -225,7 +242,14 @@ def train_and_evaluate_model(model, data_file, time_in_hrs):
 	final_accuracy = check_accuracy( model, X_test, Y_test)
 	aux.log('Initial accuracy: {}'.format( str( init_accuracy ) ) )
 	aux.log('Accuracy after training: {}'.format( str( final_accuracy ) ) )
-	return hist, init_accuracy, final_accuracy
+	"""
+	results = {}
+	results['train_loss'] = train_loss
+	results['test_loss'] = test_loss
+	results['train_accuracy'] = train_accuracy
+	results['test_accuracy'] = test_accuracy
+
+	return results
 
 def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2, predictor = 'numerical'):
 	"""
@@ -240,22 +264,20 @@ def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 
 	params['predictor'] = predictor
 	return params
 
-def plot_performance( model_name, history ):
+def plot_performance( model_name, results ):
 	"""
 	Given the history of a training process generates a plot of the loss and accuracy as a function of time, which is saved as an external file.
 	"""
 	fig, axs = plt.subplots(2)
 	fig.suptitle('Training performance for {}'.format(model_name))
-	axs[0].plot( history['loss'], label = 'Train set loss' )
-	axs[0].plot( history['val_loss'], label = 'Test set loss' )
+	axs[0].plot( results['train_loss'], label = 'Train set loss' )
+	axs[0].plot( results['test_loss'], label = 'Test set loss' )
 	axs[0].legend( loc = 'right' )
 
-	# if categorical plot the accuracy
-	if 'sparse_categorical_accuracy' in history.keys():
-		# the accuracy plotted here is some kind of average, I am not sure if we should include it
-		axs[1].plot( history['sparse_categorical_accuracy'], label = 'Train set accuracy' )
-		axs[1].plot( history['val_sparse_categorical_accuracy'], label = 'Test set accuracy' )
-		axs[1].legend( loc = 'right' )
+	axs[1].plot( results['train_accuracy'], label = 'Train set accuracy' )
+	axs[1].plot( results['test_accuracy'], label = 'Test set accuracy' )
+	axs[1].legend( loc = 'right' )
+
 	fig.savefig('results/{}.png'.format(model_name))
 	plt.close()
 
@@ -268,27 +290,20 @@ def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 		data_file = 'data/data{}d.npz'.format( input_shape[1] )
 		model = create_model(input_shape, params)
 		model.save('results/' + model_name + '_init.h5')
-		hist, init_accuracy, final_accuracy = train_and_evaluate_model(model, data_file, time_in_hrs)
-		model.save('results/' + model_name + '_final.h5')
+		results = train_and_evaluate_model(model_name, model, data_file, time_in_hrs * config.secs_in_hr )
 		# Plot the training performance
-		plot_performance( model_name, hist.history )
+		plot_performance( model_name, results )
 		# Store information about the training in the database
 		coll, client = aux.get_collection('results')
 		record = params
 		record['model_name'] = model_name
-		record['init_accuracy'] = init_accuracy
-		record['final_accuracy'] = final_accuracy
-		record['accuracy_increase'] = final_accuracy - init_accuracy
-
-		if init_accuracy > 0:
-			record['accuracy_ratio'] = final_accuracy / init_accuracy
-		else:
-			record['accuracy_ratio'] = config.max_accuracy
-
+		record['init_accuracy'] = results['test_accuracy'][0]
+		record['final_accuracy'] = results['test_accuracy'][-1]
 		record['training_time'] = time_in_hrs
 		coll.insert_one( record )
 		client.close()
-		return hist
+
+		return results
 		
 	else:
 		aux.log('The embedding dimension must be chosen from the following list: {}'.format(emb_dims))
