@@ -50,7 +50,7 @@ def check_score_distribution( max_words = None, quality = 0 ):
 def get_input_data(n, max_words, emb_dim, quality):
 	"""
 	Returns an embedding of reviews from the database that satisfy certain criteria	(maximum number of words and minimum quality).
-	To ensure that we are training on a balanced set we choose the same number of reviews (denoted by n) with each grade.
+	To ensure that we are training on a balanced set we choose the same number of reviews (denoted by n) with each score.
 	In the last step the reviews are randomly permuted.
 	"""
 	coll, client = aux.get_collection('reviews')
@@ -288,12 +288,15 @@ def plot_performance( model_name, results ):
 	fig.savefig('results/{}.png'.format(model_name))
 	plt.close()
 
-def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
+def explore_model( model_label, input_shape, params, time_in_hrs = 1/60 ):
 	"""
 	Creates a model according to the specification, trains it for a specified amount of time
 	(specified in hours) and evaluates the results on the test set. The results are plotted as well as saved in the database.
 	"""
 	if input_shape[1] in config.emb_dims:
+		coll, client = aux.get_collection('results')
+		count = coll.count_documents({}) + 1
+		model_name = model_label + '_' + str(count)
 		data_file = 'data/data{}d.npz'.format( input_shape[1] )
 		model = create_model(input_shape, params)
 		model.save('results/' + model_name + '_init.h5')
@@ -301,7 +304,6 @@ def explore_model( model_name, input_shape, params, time_in_hrs = 1/60 ):
 		# Plot the training performance
 		plot_performance( model_name, results )
 		# Store information about the training in the database
-		coll, client = aux.get_collection('results')
 		record = params
 		record['model_name'] = model_name
 		record['init_accuracy'] = results['test_accuracy'][0]
