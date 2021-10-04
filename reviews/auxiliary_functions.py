@@ -59,6 +59,9 @@ def convert_text_to_pickle( input_file ):
 		pickle.dump( emb_dict, pickle_file )
 
 def pickle_emb_dict():
+	"""
+	Convert all the CSV glove files to pickle.
+	"""
 	for emb_dim in config.emb_dims:
 		input_file = config.emb_dict_file.format(emb_dim)
 		log('Pickling file: {}.txt'.format(input_file))
