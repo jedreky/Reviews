@@ -71,7 +71,7 @@ def get_emb_dict( emb_dim ):
 	"""
 	Returns the embedding dictionary of specified dimension.
 	"""
-	filename = config.emb_dict_file.format(emb_dim)
+	filename = config.emb_dict_file.format(emb_dim) + '.pickle'
 
 	with open(filename, 'rb') as pickle_file:
 		emb_dict = pickle.load( pickle_file )
