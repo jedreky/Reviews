@@ -6,6 +6,7 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import pymongo
 import sklearn.model_selection
 import sklearn.utils
 import time
@@ -23,14 +24,22 @@ import reviews.config as config
 #######################################################
 # Functions related to data verification and processing
 #######################################################
-def check_score_distribution():
+def check_score_distribution( max_words = None, quality = 0 ):
 	"""
-	Checks the distribution of scores in the reviews database.
+	From the reviews database select the reviews satisfying certain criteria and print the distribution of scores.
 	"""
 	coll, client = aux.get_collection('reviews')
 
-	count_by_score = { '$group': { '_id': '$score', 'count': { '$sum': 1 } } }
-	pipeline = [ count_by_score ]
+	pipeline = []
+	
+	if max_words is not None:
+		pipeline.append( { '$match': { 'words': { '$lte': max_words } } } )
+	
+	if quality > 0:
+		pipeline.append( { '$match': { 'quality': { '$gte': quality } } } )
+
+	pipeline.append( { '$group': { '_id': '$score', 'count': { '$sum': 1 } } } )
+	pipeline.append( { '$sort': { 'count': pymongo.DESCENDING } } )
 	results = coll.aggregate( pipeline )
 
 	for r in results:
@@ -55,7 +64,7 @@ def get_input_data(n, max_words, emb_dim, quality):
 	j = 0
 
 	for score in range(1, 11):
-		results = coll.find( { 'words': { '$lt': max_words }, 'quality': { '$gt': quality }, 'score': score } )
+		results = coll.find( { 'words': { '$lte': max_words }, 'quality': { '$gte': quality }, 'score': score } )
 
 		k = 0
 		for r in results:
