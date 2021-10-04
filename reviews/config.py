@@ -5,14 +5,17 @@ This file sets some global variables and parameters.
 # name of the Mongo database
 database_name = 'Reviews'
 
+# path to the embedding dictionary files
+emb_dict_file = 'glove.6B/glove.6B.{}d'
+
+# valid embedding dimensions
+emb_dims = ( 50, 100, 200, 300 )
+
 # The maximal length of a review
 max_words = 150
 
 # number of movies on every page
 movies_per_page = 50
-
-# valid embedding dimensions
-emb_dims = ( 50, 100, 200, 300 )
 
 # number of epochs between accuracy checks
 N_epochs = 10

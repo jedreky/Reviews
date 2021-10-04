@@ -58,8 +58,7 @@ def get_input_data(n, max_words, emb_dim, quality):
 	X = np.zeros( [ 10 * n, max_words, emb_dim ] )
 	Y = np.zeros( [ 10 * n, 1] )
 
-	with open('glove.6B/glove.6B.{}d.pickle'.format( str(emb_dim) ), 'rb') as pickle_file:
-		emb_dict = pickle.load( pickle_file )
+	emb_dict = get_emb_dict( emb_dim )
 
 	j = 0
 
@@ -208,8 +207,7 @@ def predict_rating(model, review, length, emb_dim):
 	"""
 	Given a model and a review returns the prediction.
 	"""
-	with open('glove.6B/glove.6B.{}d.pickle'.format( str(emb_dim) ), 'rb') as pickle_file:
-		emb_dict = pickle.load( pickle_file )
+	emb_dict = get_emb_dict( emb_dim )
 
 	x = convert_review( review, length, emb_dict )
 	y = model.predict( x.reshape( [1, x.shape[0], x.shape[1] ] ) )
