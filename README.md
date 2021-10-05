@@ -1,5 +1,7 @@
 # Reviews
 
+[WORK IN PROGRESS]
+
 The goal of this project is to build and train a machine learning (ML) model capable of performing sentiment analysis of movie reviews.
 
 The first module (crawler.py) provides functions necessary to download a large number of movie reviews from IMDB.com and store them in a local Mongo database. For each review we save the content of the review, the score (on the scale from 1 to 10) and the quality (assessed by the number of people that had found them helpful).
