@@ -91,6 +91,8 @@ def get_input_data(n, max_words, emb_dim, quality):
 	To ensure that we are training on a balanced dataset we choose the same number of reviews (denoted by n) with each score.
 	In the last step the reviews are randomly permuted.
 	"""
+	aux.log('Extracting input data for: n = {}, max_words = {}, emb_dim = {}, quality = {}'.format(n, max_words, emb_dim, quality))
+
 	coll, client = aux.get_collection('reviews')
 
 	# initialise empty arrays
@@ -137,8 +139,6 @@ def get_input_data(n, max_words, emb_dim, quality):
 	Y = Y[:count_total]
 	# shuffle the dataset
 	X, Y = sklearn.utils.shuffle(X, Y)
-
-	aux.log('Extracting input data for: n = {}, max_words = {}, emb_dim = {}, quality = {}'.format(n, max_words, emb_dim, quality))
 
 	# check if a sufficient number of reviews has been found
 	if count_total == 10 * n:
