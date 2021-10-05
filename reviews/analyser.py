@@ -258,7 +258,7 @@ def predict_rating(model, review, length, emb_dim):
 		y = model.predict( x.reshape( [1, x.shape[0], x.shape[1] ] ) )
 		print( np.round(y, 3) )
 
-def train_model(model_name, model, data_file, time_in_secs):
+def train_model(full_id, model, data_file, time_in_secs):
 	"""
 	Trains the given model for a required amount of time and returns the training history.
 	"""
@@ -281,7 +281,7 @@ def train_model(model_name, model, data_file, time_in_secs):
 		# the history object stores the information about the loss on train and test sets
 		hist = model.fit( X_train, Y_train, epochs = config.N_epochs, validation_data = ( X_test, Y_test ) )
 		# save the model after each iteration
-		model.save('results/{}/{}_final.h5'.format( model_name[0], model_name[1] ))
+		model.save('results/{}/{}_final.h5'.format( full_id[0], full_id[1] ))
 		# append the loss information to the lists
 		train_loss += hist.history['loss']
 		test_loss += hist.history['val_loss']
@@ -298,7 +298,7 @@ def train_model(model_name, model, data_file, time_in_secs):
 
 	return results
 
-def plot_performance( model_name, time_in_hrs, results ):
+def plot_performance( full_id, time_in_hrs, results ):
 	"""
 	Given the training information generates a plot of the loss and accuracy as a function of time and saves it as a .png file.
 	"""
@@ -312,7 +312,7 @@ def plot_performance( model_name, time_in_hrs, results ):
 		time_info = ''
 
 	# set the plot title
-	plot_title = 'Training performance for {}.{}'.format( model_name[0], model_name[1], int(time_in_hrs) ) + time_info
+	plot_title = 'Training performance for {}.{}'.format( full_id[0], full_id[1], int(time_in_hrs) ) + time_info
 	fig.suptitle( plot_title )
 
 	# plot the loss data
@@ -326,10 +326,10 @@ def plot_performance( model_name, time_in_hrs, results ):
 	axs[1].legend( loc = 'right' )
 
 	# save the figure
-	fig.savefig('results/{}/{}.png'.format( model_name[0], model_name[1] ))
+	fig.savefig('results/{}/{}.png'.format( full_id[0], full_id[1] ))
 	plt.close()
 
-def explore_model( model_family, input_shape, params, time_in_hrs = 1/60 ):
+def explore_model( batch_name, input_shape, params, time_in_hrs = 1/60 ):
 	"""
 	Creates a model according to the specification, trains it for a specified amount of time (specified in hours) and evaluates the results
 	on the test set. The results are then plotted, saved in an .npz file and in the database.
@@ -338,35 +338,35 @@ def explore_model( model_family, input_shape, params, time_in_hrs = 1/60 ):
 	if input_shape[1] in config.emb_dims:
 
 		# check if the subdirectory for storing results exists
-		if not os.path.exists('results/{}'.format(model_family)):
+		if not os.path.exists('results/{}'.format(batch_name)):
 			# if not, create one
-			aux.log('Directory {} not present'.format(model_family))
-			os.mkdir('results/{}'.format(model_family))
+			aux.log('Directory {} not present'.format(batch_name))
+			os.mkdir('results/{}'.format(batch_name))
 
 		# determine the full name of the current model (based on the number of models from this family already present in the database)
 		coll, client = aux.get_collection('results')
-		count = coll.count_documents( { 'model_family': model_family } ) + 1
-		model_name = ( model_family, count )
+		model_id = coll.count_documents( { 'batch_name': batch_name } ) + 1
+		full_id = ( batch_name, model_id )
 
 		# create a model and save it
 		model = create_model(input_shape, params)
-		model.save('results/{}/{}_init.h5'.format( model_name[0], model_name[1] ))
+		model.save('results/{}/{}_init.h5'.format( full_id[0], full_id[1] ))
 		
 		# train the model for a specified amount of time
 		data_file = 'input_data/data{}d.npz'.format( input_shape[1] )
-		results = train_model(model_name, model, data_file, time_in_hrs * config.secs_in_hr )
+		results = train_model(full_id, model, data_file, time_in_hrs * config.secs_in_hr )
 
 		# plot the training performance
-		plot_performance( model_name, time_in_hrs, results )
+		plot_performance( full_id, time_in_hrs, results )
 		
 		# save the results to an .npz file
-		with open('results/{}/{}.npz'.format( model_name[0], model_name[1] ), 'wb') as data_file:
+		with open('results/{}/{}.npz'.format( full_id[0], full_id[1] ), 'wb') as data_file:
 			np.savez(data_file, train_loss = results['train_loss'], test_loss = results['test_loss'], train_accuracy = results['train_accuracy'], test_accuracy = results['test_accuracy'])
 		
 		# store the training information in the database
 		record = params
-		record['model_family'] = model_name[0]
-		record['model_id'] = model_name[1]
+		record['batch_name'] = batch_name
+		record['model_id'] = model_id
 		record['init_accuracy'] = results['test_accuracy'][0]
 		record['final_accuracy'] = results['test_accuracy'][-1]
 		record['training_time'] = time_in_hrs
