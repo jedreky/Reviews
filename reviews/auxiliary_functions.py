@@ -7,6 +7,8 @@ import json
 import numpy as np
 import pickle
 import pymongo
+import smtplib
+import ssl
 
 import reviews.config as config
 
@@ -20,11 +22,22 @@ def get_timestamp():
 	timestamp = datetime.datetime.now()
 	return timestamp.strftime('%H:%M:%S, %d.%m.%Y')
 
-def log(str):
+def log(string):
 	"""
 	Prints a timestamped message.
 	"""
-	print( get_timestamp() + ': ' + str )
+	print( get_timestamp() + ': ' + string )
+
+def send_email(body, subject = 'Message from guanako'):
+	message = 'Subject: {}\n\n{}'.format( subject, body )
+
+	with open('email_keys.json', 'r') as json_file:
+		email_keys = json.load(json_file)
+		context = ssl.create_default_context()
+		
+		with smtplib.SMTP_SSL( email_keys['smtp_server'], email_keys['port'], context = context ) as server:
+			server.login( email_keys['sender_email'], email_keys['password'] )
+			server.sendmail( email_keys['sender_email'], email_keys['receiver_email'], message)
 
 def convert_to_int(string):
 	return int(string.replace(',', ''))
@@ -91,6 +104,6 @@ def get_collection(name):
 	"""
 	with open('mongo_keys.json', 'r') as json_file:
 		mongo_keys = json.load(json_file)
-		client = pymongo.MongoClient( username = mongo_keys[0], password = mongo_keys[1] )
+		client = pymongo.MongoClient( username = mongo_keys['user'], password = mongo_keys['password'] )
 		coll = client[config.database_name][name]
 		return coll, client

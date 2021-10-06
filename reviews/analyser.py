@@ -329,7 +329,7 @@ def plot_performance( full_id, time_in_hrs, results ):
 	fig.savefig('results/{}/{}.png'.format( full_id[0], full_id[1] ))
 	plt.close()
 
-def explore_model( batch_name, input_shape, params, time_in_hrs = 1/60 ):
+def explore_model( batch_name, input_shape, params, time_in_hrs = 1/60, initial_model = None ):
 	"""
 	Creates a model according to the specification, trains it for a specified amount of time (specified in hours) and evaluates the results
 	on the test set. The results are then plotted, saved in an .npz file and in the database.
@@ -340,16 +340,22 @@ def explore_model( batch_name, input_shape, params, time_in_hrs = 1/60 ):
 		# check if the subdirectory for storing results exists
 		if not os.path.exists('results/{}'.format(batch_name)):
 			# if not, create one
-			aux.log('Directory {} not present'.format(batch_name))
+			aux.log('Directory {} not present, will create it now'.format(batch_name))
 			os.mkdir('results/{}'.format(batch_name))
 
 		# determine the full name of the current model (based on the number of models from this family already present in the database)
 		coll, client = aux.get_collection('results')
 		model_id = coll.count_documents( { 'batch_name': batch_name } ) + 1
+		print(model_id)
+		print( input_shape[1] )
 		full_id = ( batch_name, model_id )
 
 		# create a model and save it
-		model = create_model(input_shape, params)
+		if initial_model == None:
+			model = create_model(input_shape, params)
+		else:
+			model = tensorflow.keras.models.load_model(initial_model)
+
 		model.save('results/{}/{}_init.h5'.format( full_id[0], full_id[1] ))
 		
 		# train the model for a specified amount of time
@@ -365,6 +371,7 @@ def explore_model( batch_name, input_shape, params, time_in_hrs = 1/60 ):
 		
 		# store the training information in the database
 		record = params
+		record['emb_dim'] = input_shape[1]
 		record['batch_name'] = batch_name
 		record['model_id'] = model_id
 		record['init_accuracy'] = results['test_accuracy'][0]
