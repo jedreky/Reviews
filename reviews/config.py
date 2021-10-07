@@ -9,7 +9,8 @@ database_name = 'Reviews'
 emb_dict_file = 'glove.6B/glove.6B.{}d'
 
 # valid embedding dimensions
-emb_dims = ( 50, 100, 200, 300 )
+#emb_dims = ( 50, 100, 200, 300 )
+emb_dims = ( 50, 100 )
 
 # The maximal length of a review
 max_words = 150
@@ -19,10 +20,6 @@ movies_per_page = 50
 
 # number of epochs between accuracy checks
 N_epochs = 10
-
-# numerical value of accuracy ratio when the initial accuracy equals 0
-# TODO: most likely not needed anymore
-max_accuracy = 100
 
 # number of seconds in an hour
 secs_in_hr = 3600

@@ -49,7 +49,7 @@ def check_score_distribution( max_words = None, quality = 0 ):
 
 	client.close()
 
-def convert_review(review, length, emb_dict):
+def convert_review(review, length, emb_dict, padding):
 	"""
 	Converts a review into its embedding.
 	"""
@@ -78,20 +78,25 @@ def convert_review(review, length, emb_dict):
 	# check if the review matches the length criteria
 	if len(review_emb) <= length:
 		# if yes, apply appropriate padding
-		review_emb_pad = np.pad( np.array(review_emb), ( ( length - len(review_emb) , 0), (0, 0) ) )
+		# note that review_emb.shape = ( max_words, emb_dim )
+		if padding == 'pre':
+			review_emb_pad = np.pad( np.array(review_emb), ( ( length - len(review_emb) , 0), (0, 0) ) )
+		elif padding == 'post':
+			review_emb_pad = np.pad( np.array(review_emb), ( ( 0,  length - len(review_emb) ), (0, 0) ) )
+
 	else:
 		# if no, set the return variable to None
 		review_emb_pad = None
 
 	return review_emb_pad
 
-def get_input_data(n, max_words, emb_dim, quality):
+def get_input_data(n, max_words, emb_dim, quality, padding):
 	"""
 	Returns an embedding of reviews from the database that satisfy certain 	criteria (number of words and quality).
 	To ensure that we are training on a balanced dataset we choose the same number of reviews (denoted by n) with each score.
 	In the last step the reviews are randomly permuted.
 	"""
-	aux.log('Extracting input data for: n = {}, max_words = {}, emb_dim = {}, quality = {}'.format(n, max_words, emb_dim, quality))
+	aux.log('Extracting input data for: n = {}, max_words = {}, emb_dim = {}, quality = {}, padding = {}'.format(n, max_words, emb_dim, quality, padding))
 
 	coll, client = aux.get_collection('reviews')
 
@@ -119,7 +124,7 @@ def get_input_data(n, max_words, emb_dim, quality):
 
 		# loop over reviews until either we obtain the desired number or run out of reviews
 		while count_per_score < n and k < count:
-			review_emb = convert_review( results[k]['content'], max_words, emb_dict )
+			review_emb = convert_review( results[k]['content'], max_words, emb_dict, padding )
 			k += 1
 
 			# if a valid embedding is returned add it to the dataset
@@ -148,26 +153,26 @@ def get_input_data(n, max_words, emb_dim, quality):
 	
 	return X, Y
 
-def generate_input_data_fixed_emb_dim(filename, n, max_words, emb_dim, quality):
+def generate_input_data_fixed_emb_dim(filename, n, max_words, emb_dim, quality, padding):
 	"""
 	Generates input data for a fixed embedding dimension and saves it to an .npz file.
 	"""
 	# get input data from database
-	X, Y = get_input_data(n, max_words, emb_dim, quality)
+	X, Y = get_input_data(n, max_words, emb_dim, quality, padding)
 	# split input data into train and test sets
 	X_train, X_test, Y_train, Y_test = sklearn.model_selection.train_test_split( X, Y, test_size = 0.15 )
 
 	# save input data to an .npz file
-	with open('input_data/{}d.npz'.format( filename ), 'wb') as data_file:
+	with open('input_data/{}{}d-{}.npz'.format( filename, emb_dim, padding ), 'wb') as data_file:
 		np.savez(data_file, X_train = X_train, X_test = X_test, Y_train = Y_train, Y_test = Y_test)
 
-def generate_input_data(filename, n = 15, max_words = 150, quality = 0.5):
+def generate_input_data(filename, n = 15, max_words = 150, quality = 0.5, padding = 'post'):
 	"""
 	Generates input data for all valid embedding dimensions and saves them to .npz files.
 	"""
 	# iterate over all valid embedding dimensions
 	for emb_dim in config.emb_dims:
-		generate_input_data_fixed_emb_dim( filename + str(emb_dim), n, max_words, emb_dim, quality )
+		generate_input_data_fixed_emb_dim( filename, n, max_words, emb_dim, quality, padding )
 
 def load_data(data_file):
 	"""
@@ -203,12 +208,11 @@ def get_model_params(model_id):
 	client.close()
 	
 	# remove the unwanted keys
-	keys_to_remove = ( '_id', 'batch_name', 'batch_counter', 'init_accuracy', 'final_accuracy', 'training_time' )
+	keys_to_remove = ( '_id', 'batch_name', 'batch_counter', 'init_accuracy', 'final_accuracy', 'training_time', 'parent_id' )
 	for key in keys_to_remove:
-		params.pop(key)
-
-	if 'parent_id' in params:
-		params.pop('parent_id')
+		# first check if the key is present to avoid errors
+		if key in params:
+			params.pop(key)
 
 	return params
 
@@ -237,7 +241,7 @@ def create_model(params):
 
 	return model
 
-def check_accuracy(model, X, Y, err = 1):
+def compute_accuracy(model, X, Y, err = 1):
 	"""
 	Returns the fraction of examples for which the returned score is close to the true score up to the specified additive error.
 	"""
@@ -264,6 +268,21 @@ def check_accuracy(model, X, Y, err = 1):
 
 	return frac
 
+def compute_mse(model, X, Y):
+	"""
+	For numerical models, compute the mean squared error manually.
+	This is just as a double check of the existing MSE implementation.
+	"""
+	val = 0
+
+	for j in range( X.shape[0] ):
+		Y_pred = model.predict( X[j].reshape( [1, X.shape[1], X.shape[2]] ) )
+		val += np.power( (Y_pred - Y[j]), 2 )
+
+	mse = val / X.shape[0]
+
+	return mse
+
 def predict_rating(model, review, length, emb_dim):
 	"""
 	Given a model and a review returns the prediction.
@@ -289,8 +308,8 @@ def train_model(model_id, model, data_file, time_in_secs):
 	test_accuracy = []
 	
 	# compute the initial accuracy of the model
-	train_accuracy.append( check_accuracy( model, X_train, Y_train ) )
-	test_accuracy.append( check_accuracy( model, X_test, Y_test ) )
+	train_accuracy.append( compute_accuracy( model, X_train, Y_train ) )
+	test_accuracy.append( compute_accuracy( model, X_test, Y_test ) )
 
 	# start the clock
 	t0 = time.time()
@@ -306,8 +325,8 @@ def train_model(model_id, model, data_file, time_in_secs):
 		train_loss += hist.history['loss']
 		test_loss += hist.history['val_loss']
 		# compute the accuracy and append it to the lists
-		train_accuracy.append( check_accuracy( model, X_train, Y_train ) )
-		test_accuracy.append( check_accuracy( model, X_test, Y_test ) )
+		train_accuracy.append( compute_accuracy( model, X_train, Y_train ) )
+		test_accuracy.append( compute_accuracy( model, X_test, Y_test ) )
 
 	# store the training results in a single dictionary
 	results = {}
@@ -382,8 +401,10 @@ def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
 	model.save('results/{}/{}_init.h5'.format( model_id[0], model_id[1] ))
 	
 	# train the model for a specified amount of time
-	data_file = 'input_data/data{}d.npz'.format( params['input_shape'][1] )
-	results = train_model(model_id, model, data_file, time_in_hrs * config.secs_in_hr )
+#	data_file = 'input_data/data{}d.npz'.format( params['input_shape'][1] )
+	aux.log('Train model {}.{} for {} hours'.format( model_id[0], model_id[1], time_in_hrs ) )
+	aux.log('Using data file: {}'.format( params['data_file'] ))
+	results = train_model(model_id, model, params['data_file'], time_in_hrs * config.secs_in_hr )
 
 	# plot the training performance
 	plot_performance( model_id, time_in_hrs, results )
@@ -395,8 +416,10 @@ def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
 	# store the training information in the database
 	params['batch_name'] = batch_name
 	params['batch_counter'] = batch_counter
-	params['init_accuracy'] = results['test_accuracy'][0]
-	params['final_accuracy'] = results['test_accuracy'][-1]
+	params['train_loss'] = ( results['train_loss'][0], results['train_loss'][-1] )
+	params['test_loss'] = ( results['test_loss'][0], results['test_loss'][-1] )
+	params['train_accuracy'] = ( results['train_accuracy'][0], results['train_accuracy'][-1] )
+	params['test_accuracy'] = ( results['test_accuracy'][0], results['test_accuracy'][-1] )
 	params['training_time'] = time_in_hrs
 	coll.insert_one( params )
 	client.close()
