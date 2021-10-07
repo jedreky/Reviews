@@ -178,7 +178,7 @@ def load_data(data_file):
 ############################################################
 # Functions related to ML models
 ############################################################
-def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2, predictor = 'numerical'):
+def generate_params( learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2, predictor = 'numerical', input_shape = (150, 50) ):
 	"""
 	Generates a default set of parameters.
 	"""
@@ -189,19 +189,39 @@ def generate_params(learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 
 	params['dropout'] = dropout
 	params['recurrent_dropout'] = recurrent_dropout
 	params['predictor'] = predictor
+	params['input_shape'] = input_shape
 
 	return params
 
-def create_model(input_shape, params):
+def get_model_params(model_id):
+	"""
+	Extracts parameters of a given model from the database.
+	"""
+	# obtain the whole dictionary from the database
+	coll, client = aux.get_collection('results')
+	params = coll.find_one( { 'batch_name': model_id[0], 'batch_counter': model_id[1] } )
+	client.close()
+	
+	# remove the unwanted keys
+	keys_to_remove = ( '_id', 'batch_name', 'batch_counter', 'init_accuracy', 'final_accuracy', 'training_time' )
+	for key in keys_to_remove:
+		params.pop(key)
+
+	if 'parent_id' in params:
+		params.pop('parent_id')
+
+	return params
+
+def create_model(params):
 	"""
 	Creates a recurrent neural network according to the specified parameters.
 	"""
 	model = Sequential()
 
 	if params['layer'] == 'GRU':
-		model.add( GRU(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
+		model.add( GRU(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = params['input_shape'] ) )
 	elif params['layer'] == 'LSTM':
-		model.add( LSTM(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = input_shape ) )
+		model.add( LSTM(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = params['input_shape'] ) )
 	else:
 		aux.log('Warning: invalid value of the the layer parameter.')
 
@@ -258,9 +278,9 @@ def predict_rating(model, review, length, emb_dim):
 		y = model.predict( x.reshape( [1, x.shape[0], x.shape[1] ] ) )
 		print( np.round(y, 3) )
 
-def train_model(full_id, model, data_file, time_in_secs):
+def train_model(model_id, model, data_file, time_in_secs):
 	"""
-	Trains the given model for a required amount of time and returns the training history.
+	Trains the given model for a required amount of time, while saving at regular intervals, and returns the training history.
 	"""
 	X_train, X_test, Y_train, Y_test = load_data(data_file)
 	train_loss = []
@@ -281,7 +301,7 @@ def train_model(full_id, model, data_file, time_in_secs):
 		# the history object stores the information about the loss on train and test sets
 		hist = model.fit( X_train, Y_train, epochs = config.N_epochs, validation_data = ( X_test, Y_test ) )
 		# save the model after each iteration
-		model.save('results/{}/{}_final.h5'.format( full_id[0], full_id[1] ))
+		model.save('results/{}/{}_final.h5'.format( model_id[0], model_id[1] ))
 		# append the loss information to the lists
 		train_loss += hist.history['loss']
 		test_loss += hist.history['val_loss']
@@ -298,7 +318,7 @@ def train_model(full_id, model, data_file, time_in_secs):
 
 	return results
 
-def plot_performance( full_id, time_in_hrs, results ):
+def plot_performance( model_id, time_in_hrs, results ):
 	"""
 	Given the training information generates a plot of the loss and accuracy as a function of time and saves it as a .png file.
 	"""
@@ -312,7 +332,7 @@ def plot_performance( full_id, time_in_hrs, results ):
 		time_info = ''
 
 	# set the plot title
-	plot_title = 'Training performance for {}.{}'.format( full_id[0], full_id[1], int(time_in_hrs) ) + time_info
+	plot_title = 'Training performance for {}.{}'.format( model_id[0], model_id[1], int(time_in_hrs) ) + time_info
 	fig.suptitle( plot_title )
 
 	# plot the loss data
@@ -326,62 +346,63 @@ def plot_performance( full_id, time_in_hrs, results ):
 	axs[1].legend( loc = 'right' )
 
 	# save the figure
-	fig.savefig('results/{}/{}.png'.format( full_id[0], full_id[1] ))
+	fig.savefig('results/{}/{}.png'.format( model_id[0], model_id[1] ))
 	plt.close()
 
-def explore_model( batch_name, input_shape, params, time_in_hrs = 1/60, initial_model = None ):
+#def setup_and_train_model( batch_name, input_shape, params, time_in_hrs = 1/60, initial_model = None ):
+def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
 	"""
-	Creates a model according to the specification, trains it for a specified amount of time (specified in hours) and evaluates the results
-	on the test set. The results are then plotted, saved in an .npz file and in the database.
+	Sets up a model according to the specification, trains it for a specified amount of time (specified in hours) and
+	evaluates the results on the test set. The results are then plotted, saved in an .npz file and in the database.
 	"""
-	# check if a valid embedding dimension is specified
-	if input_shape[1] in config.emb_dims:
+#	# check if a valid embedding dimension is specified
+#	if input_shape[1] in config.emb_dims:
 
-		# check if the subdirectory for storing results exists
-		if not os.path.exists('results/{}'.format(batch_name)):
-			# if not, create one
-			aux.log('Directory {} not present, will create it now'.format(batch_name))
-			os.mkdir('results/{}'.format(batch_name))
+	# check if the subdirectory for storing results exists
+	if not os.path.exists('results/{}'.format(batch_name)):
+		# if not, create one
+		aux.log('Directory {} not present, will create it now'.format(batch_name))
+		os.mkdir('results/{}'.format(batch_name))
 
-		# determine the full name of the current model (based on the number of models from this family already present in the database)
-		coll, client = aux.get_collection('results')
-		model_id = coll.count_documents( { 'batch_name': batch_name } ) + 1
-		print(model_id)
-		print( input_shape[1] )
-		full_id = ( batch_name, model_id )
+	# determine the full name of the current model (based on the number of models from this family already present in the database)
+	coll, client = aux.get_collection('results')
+	batch_counter = coll.count_documents( { 'batch_name': batch_name } ) + 1
+	model_id = ( batch_name, batch_counter )
 
-		# create a model and save it
-		if initial_model == None:
-			model = create_model(input_shape, params)
-		else:
-			model = tensorflow.keras.models.load_model(initial_model)
-
-		model.save('results/{}/{}_init.h5'.format( full_id[0], full_id[1] ))
-		
-		# train the model for a specified amount of time
-		data_file = 'input_data/data{}d.npz'.format( input_shape[1] )
-		results = train_model(full_id, model, data_file, time_in_hrs * config.secs_in_hr )
-
-		# plot the training performance
-		plot_performance( full_id, time_in_hrs, results )
-		
-		# save the results to an .npz file
-		with open('results/{}/{}.npz'.format( full_id[0], full_id[1] ), 'wb') as data_file:
-			np.savez(data_file, train_loss = results['train_loss'], test_loss = results['test_loss'], train_accuracy = results['train_accuracy'], test_accuracy = results['test_accuracy'])
-		
-		# store the training information in the database
-		record = params
-		record['emb_dim'] = input_shape[1]
-		record['batch_name'] = batch_name
-		record['model_id'] = model_id
-		record['init_accuracy'] = results['test_accuracy'][0]
-		record['final_accuracy'] = results['test_accuracy'][-1]
-		record['training_time'] = time_in_hrs
-		coll.insert_one( record )
-		client.close()
-
-		# this is currently optional, might be removed in the future
-		return results
-
+	# create a model and save it
+	if 'parent_id' in params:
+		parent_id = params['parent_id']
+		aux.log('Loading initial model and its parameters: {}.{}'.format( parent_id[0], parent_id[1] ) )
+		model = tensorflow.keras.models.load_model( 'results/{}/{}_final.h5'.format( parent_id[0], parent_id[1] ) )
+		params.update( get_model_params( parent_id ) )
 	else:
-		aux.log('The embedding dimension must be chosen from the following list: {}'.format(emb_dims))
+		aux.log('No initial model specified, creating from scratch')
+		model = create_model(params)
+
+	model.save('results/{}/{}_init.h5'.format( model_id[0], model_id[1] ))
+	
+	# train the model for a specified amount of time
+	data_file = 'input_data/data{}d.npz'.format( params['input_shape'][1] )
+	results = train_model(model_id, model, data_file, time_in_hrs * config.secs_in_hr )
+
+	# plot the training performance
+	plot_performance( model_id, time_in_hrs, results )
+	
+	# save the results to an .npz file
+	with open('results/{}/{}.npz'.format( model_id[0], model_id[1] ), 'wb') as data_file:
+		np.savez(data_file, train_loss = results['train_loss'], test_loss = results['test_loss'], train_accuracy = results['train_accuracy'], test_accuracy = results['test_accuracy'])
+
+	# store the training information in the database
+	params['batch_name'] = batch_name
+	params['batch_counter'] = batch_counter
+	params['init_accuracy'] = results['test_accuracy'][0]
+	params['final_accuracy'] = results['test_accuracy'][-1]
+	params['training_time'] = time_in_hrs
+	coll.insert_one( params )
+	client.close()
+
+	# this is currently optional, might be removed in the future
+	return results
+
+#	else:
+#		aux.log('The embedding dimension must be chosen from the following list: {}'.format(emb_dims))
