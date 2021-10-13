@@ -10,12 +10,8 @@ import pickle
 import pymongo
 import sklearn.model_selection
 import sklearn.utils
+import tensorflow as tf
 import time
-
-import tensorflow
-from tensorflow.keras.layers import Dense, GRU, LSTM
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.optimizers import Adam
 
 import reviews.auxiliary_functions as aux
 import reviews.config as config
@@ -59,7 +55,7 @@ def convert_review(review, length, emb_dict, padding):
 	# define a tuple of symbols to be removed
 	symbols_to_remove = ( ':' , ',' , '.', '!', '-', '(', ')' )
 	
-	# remove symbols
+	# replace symbols by white space
 	for symbol in symbols_to_remove:
 		review = review.replace( symbol, ' ' )
 
@@ -183,17 +179,28 @@ def load_data(data_file):
 ############################################################
 # Functions related to ML models
 ############################################################
-def generate_params( learning_rate = 0.001, layer = 'GRU', units = 64, dropout = 0.2, recurrent_dropout = 0.2, predictor = 'numerical', input_shape = (150, 50) ):
+def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, Dense_units = [16, 16, 16], predictor = 'numerical', learning_rate = 0.001, dropout = 0.2, recurrent_dropout = 0.2, max_sentences = 30, max_words = 150, emb_dim = 50 ):
 	"""
-	Generates a default set of parameters.
+	Generates a complete set of parameters.
 	"""
 	params = {}
 	params['learning_rate'] = learning_rate
-	params['layer'] = layer
-	params['units'] = units
+	params['RNN_type'] = RNN_type
+	params['RNN_units'] = RNN_units
 	params['dropout'] = dropout
 	params['recurrent_dropout'] = recurrent_dropout
 	params['predictor'] = predictor
+	params['sentence_based'] = sentence_based
+	params['max_sentences'] = max_sentences
+	params['max_words'] = max_words
+	params['emb_dim'] = emb_dim
+	params['Dense_units'] = Dense_units
+	
+	if sentence_based:
+		input_shape = ( params['max_sentences'], params['max_words'], params['emb_dim'] )
+	else:
+		input_shape = ( params['max_words'], params['emb_dim'] )
+	
 	params['input_shape'] = input_shape
 
 	return params
@@ -220,24 +227,48 @@ def create_model(params):
 	"""
 	Creates a recurrent neural network according to the specified parameters.
 	"""
-	model = Sequential()
-
-	if params['layer'] == 'GRU':
-		model.add( GRU(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = params['input_shape'] ) )
-	elif params['layer'] == 'LSTM':
-		model.add( LSTM(units = params['units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'], input_shape = params['input_shape'] ) )
+	if params['RNN_type'] == 'GRU':
+		RNN_layer = tf.keras.layers.GRU( params['RNN_units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'] )
+	elif params['RNN_type'] == 'LSTM':
+		RNN_layer = tf.keras.layers.LSTM( params['RNN_units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'] )
 	else:
-		aux.log('Warning: invalid value of the the layer parameter.')
+		aux.log('Warning: invalid value of the the RNN_type parameter.')
 
-	# it seems that numerical makes much more sense
 	if params['predictor'] == 'numerical':
-		model.add( Dense(1, activation = None) )
-		model.compile( loss = tensorflow.keras.losses.MeanSquaredError(), optimizer = Adam( learning_rate = params['learning_rate'] ) )
+		final_layer = tf.keras.layers.Dense(1, activation = None)
+		loss = tf.keras.losses.MeanSquaredError()
 	elif params['predictor'] == 'categorical':
-		model.add( Dense(10, activation = 'softmax') )
-		model.compile( loss = tensorflow.keras.losses.SparseCategoricalCrossentropy(), optimizer = Adam( learning_rate = params['learning_rate'] ) )
+		final_layer = tf.keras.layers.Dense(10, activation = 'softmax')
+		loss = tf.keras.losses.SparseCategoricalCrossentropy()
 	else:
-		aux.log('Warning: invalid value of the the predictor parameter.')
+		aux.log('Warning: invalid value of the predictor parameter.')
+
+	if params['sentence_based']:
+		inputs = tf.keras.Input( shape = params['input_shape'] )
+		
+		X_list = []
+		
+		for j in range( params['max_sentences'] ):
+			X_list.append( RNN_layer( inputs[ :, j, :, : ] ) )
+
+		X = tf.stack(X_list, axis = 1)
+		req_shape = (-1, params['max_sentences'] * params['RNN_units'] )
+		
+		X = tf.reshape( X, shape = req_shape )
+		
+		for units in params['Dense_units']:
+			X = tf.keras.layers.Dense( units, activation = "relu" )(X)
+		
+		outputs = final_layer(X)
+		model = tf.keras.Model( inputs = inputs, outputs = outputs )
+			
+	else:
+		model = tf.keras.models.Sequential()
+		model.add( tf.keras.layers.InputLayer( input_shape = params['input_shape'] ) )
+		model.add( RNN_layer )
+		model.add( final_layer )
+
+	model.compile( loss = loss, optimizer = tf.keras.optimizers.Adam( learning_rate = params['learning_rate'] ) )
 
 	return model
 
@@ -290,7 +321,7 @@ def predict_rating(model, review, length, emb_dim):
 	emb_dict = aux.get_emb_dict( emb_dim )
 
 	# convert the review into a vector
-	x = convert_review( review, length, emb_dict )
+	x = convert_review( review, length, emb_dict, 'post' )
 
 	# if successful compute the prediction
 	if x is not None:
@@ -392,7 +423,8 @@ def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
 	if 'parent_id' in params:
 		parent_id = params['parent_id']
 		aux.log('Loading initial model and its parameters: {}.{}'.format( parent_id[0], parent_id[1] ) )
-		model = tensorflow.keras.models.load_model( 'results/{}/{}_final.h5'.format( parent_id[0], parent_id[1] ) )
+		model = tf.keras.models.load_model( 'results/{}/{}_final.h5'.format( parent_id[0], parent_id[1] ) )
+		print('should not happen')
 		params.update( get_model_params( parent_id ) )
 	else:
 		aux.log('No initial model specified, creating from scratch')

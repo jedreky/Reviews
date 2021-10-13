@@ -13,7 +13,7 @@ batch_name = '4_padding'
 layers = ('GRU', 'LSTM')
 units_options = (32, 64, 128)
 
-training_time = 9
+training_time = 1/1000
 
 if batch_name == 'test':
 	params = analyser.generate_params()
@@ -52,9 +52,9 @@ elif batch_name == '3_emb_dims':
 
 elif batch_name == '4_padding':
 	learning_rate = 0.0015
-	params = analyser.generate_params(learning_rate, layers[0], units_options[0])
 	
 	for padding in ('pre', 'post'):
+		params = analyser.generate_params(learning_rate, layers[0], units_options[0])
 		params['data_file'] = 'input_data/{}{}d-{}.npz'.format( filename, params['input_shape'][1], padding )
 		analyser.setup_and_train_model( batch_name, params, training_time )
 

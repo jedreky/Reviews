@@ -5,6 +5,7 @@ This file contains some auxiliary functions of the Reviews package.
 import datetime
 import json
 import numpy as np
+import os
 import pickle
 import pymongo
 import smtplib
@@ -28,7 +29,8 @@ def log(string):
 	"""
 	print( get_timestamp() + ': ' + string )
 
-def send_email(body, subject = 'Message from guanako'):
+def send_email(body):
+	subject = 'Message from {}'.format(os.uname()[1])
 	message = 'Subject: {}\n\n{}'.format( subject, body )
 
 	with open('email_keys.json', 'r') as json_file:
