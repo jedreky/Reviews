@@ -45,9 +45,23 @@ def sanitise_review(review):
 max_words = 150
 emb_dim = 50
 
-coll, client = aux.get_collection('reviews')
+coll, client = aux.get_collection('raw_reviews')
 
-results = coll.find( { 'words': { '$lte': max_words } } )
+results = coll.find()
 
-for j in range(1020):
-	print( sanitise_review( results[j]['content'] ) + '\n' )
+coll2, client2 = aux.get_collection('reviews')
+
+for record in results:
+	# remove unnecessary fields
+	record.pop('_id')
+	record.pop('chars')
+	# sanitise the content
+	review = sanitise_review( record['content'] )
+	record['content'] = review
+	# remove full stops and split to count the number of words
+	review = review.replace('.', ' ')
+	record['words'] = len( review.split() )
+	coll2.insert_one( record )
+
+client.close()
+client2.close()

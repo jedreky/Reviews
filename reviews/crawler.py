@@ -92,7 +92,7 @@ def get_reviews(movie_id):
 	source = get_website_source(url)
 	reviews = extract_reviews(source)
 	
-	coll, client = aux.get_collection('reviews')
+	coll, client = aux.get_collection('raw_reviews')
 	
 	for review in reviews:
 		# check if the review is not already in the database to avoid duplicates

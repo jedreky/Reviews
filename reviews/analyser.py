@@ -58,7 +58,9 @@ def convert_review(review, length, emb_dict, padding):
 	# replace symbols by white space
 	for symbol in symbols_to_remove:
 		review = review.replace( symbol, ' ' )
-
+	
+	print(review)
+	
 	# split the string into words
 	words = review.split()
 	
