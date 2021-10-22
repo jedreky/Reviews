@@ -1,5 +1,5 @@
 """
-This file contains functions related to analysing the reviews.
+This file contains functions related to processing and analysing the reviews.
 """
 
 import csv
@@ -8,6 +8,7 @@ import numpy as np
 import os
 import pickle
 import pymongo
+import re
 import sklearn.model_selection
 import sklearn.utils
 import tensorflow as tf
@@ -19,17 +20,25 @@ import reviews.config as config
 ############################################################
 # Functions related to data verification and preparation
 ############################################################
-def check_score_distribution( max_words = None, quality = 0 ):
+def check_score_distribution( max_words = None, max_sentences = None, max_words_per_sentence = None, quality = 0 ):
 	"""
-	From the reviews database select the reviews satisfying certain criteria and print the distribution of scores.
+	From the processed reviews select the ones satisfying certain criteria and print the distribution of scores.
 	"""
 	coll, client = aux.get_collection('reviews')
 
 	pipeline = []
 
-	# add length criterion
+	# add max_words criterion
 	if max_words is not None:
 		pipeline.append( { '$match': { 'words': { '$lte': max_words } } } )
+
+	# add max_sentences criterion
+	if max_sentences is not None:
+		pipeline.append( { '$match': { 'sentences': { '$lte': max_sentences } } } )
+
+	# add max_words_per_sentence criterion
+	if max_words_per_sentence is not None:
+		pipeline.append( { '$match': { 'words_per_sentence': { '$lte': max_words_per_sentence } } } )
 
 	# add quality criterion
 	if quality > 0:
@@ -44,6 +53,71 @@ def check_score_distribution( max_words = None, quality = 0 ):
 		print(r)
 
 	client.close()
+
+def sanitise_review_content(content):
+	"""
+	Sanitises the content of a review by removing non-character symbols,
+	removing some abbreviations and unifying all end-of-sentence characters.
+	"""
+	content = content.lower()
+
+	# expand shortenings
+	content = content.replace("n't", ' not')
+	content = content.replace("'ll", ' will')
+	content = content.replace("'ve", ' have')
+	content = content.replace("'re", ' are')
+	content = content.replace("'m", ' am')
+
+	s_list = ( 'that', 'what', 'he', 'she', 'it')
+	for word in s_list:
+		content = content.replace( word + "'s" , word + ' is')
+
+	# change all end-of-sentence characters to a full stop
+	EOS_list = ( '.', '!', '?' )
+	for char in EOS_list:
+		content = content.replace( char, '.')
+
+	# reduce sequences of dots
+	content = re.sub('\.+', '.', content)
+
+	# remove all characters except for letters, white spaces and full stops
+	content = re.sub('[^a-z .]', '', content)
+
+	return content
+
+def process_raw_reviews():
+	"""
+	Process all the reviews from the raw_reviews database and store them in the reviews database.
+	"""
+	coll, client = aux.get_collection('raw_reviews')
+
+	results = coll.find()
+
+	coll2, client2 = aux.get_collection('reviews')
+
+	for record in results:
+		# remove unnecessary fields
+		record.pop('_id')
+		record.pop('chars')
+
+		# sanitise the content
+		content = sanitise_review_content( record['content'] )
+		record['content'] = content
+
+		# split the content into sentences
+		sentences = content.split('.')
+
+		# compute the length (in words) of each sentence
+		lengths = list( map( lambda x : len( x.split() ), sentences ) )
+
+		# count the number of sentences, total number of words and the maximal number of words per sentence
+		record['sentences'] = sum( x > 0 for x in lengths )
+		record['words'] = sum(lengths)
+		record['words_per_sentence'] = max( lengths )
+		coll2.insert_one( record )
+
+	client.close()
+	client2.close()
 
 def convert_review(review, length, emb_dict, padding):
 	"""
@@ -90,7 +164,7 @@ def convert_review(review, length, emb_dict, padding):
 
 def get_input_data(n, max_words, emb_dim, quality, padding):
 	"""
-	Returns an embedding of reviews from the database that satisfy certain 	criteria (number of words and quality).
+	Returns an embedding of reviews from the database that satisfy certain criteria (number of words and quality).
 	To ensure that we are training on a balanced dataset we choose the same number of reviews (denoted by n) with each score.
 	In the last step the reviews are randomly permuted.
 	"""
