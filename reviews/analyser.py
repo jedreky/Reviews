@@ -20,11 +20,11 @@ import reviews.config as config
 ############################################################
 # Functions related to data verification and preparation
 ############################################################
-def check_score_distribution( max_words = None, max_sentences = None, max_words_per_sentence = None, quality = 0 ):
+def check_score_distribution( client, max_words = None, max_sentences = None, max_words_per_sentence = None, quality = 0 ):
 	"""
 	From the processed reviews select the ones satisfying certain criteria and print the distribution of scores.
 	"""
-	coll, client = aux.get_collection('reviews')
+	coll = coll = client[config.database_name]['reviews']
 
 	pipeline = []
 
@@ -51,8 +51,6 @@ def check_score_distribution( max_words = None, max_sentences = None, max_words_
 
 	for r in results:
 		print(r)
-
-	client.close()
 
 def sanitise_review_content(content):
 	"""
@@ -85,15 +83,15 @@ def sanitise_review_content(content):
 
 	return content
 
-def process_raw_reviews():
+def process_raw_reviews(client):
 	"""
 	Process all the reviews from the raw_reviews database and store them in the reviews database.
 	"""
-	coll, client = aux.get_collection('raw_reviews')
+	coll_raw = client[config.database_name]['raw_reviews']
 
-	results = coll.find()
+	results = coll_raw.find()
 
-	coll2, client2 = aux.get_collection('reviews')
+	coll_reviews = client[config.database_name]['reviews']
 
 	for record in results:
 		# remove unnecessary fields
@@ -114,10 +112,7 @@ def process_raw_reviews():
 		record['sentences'] = sum( x > 0 for x in lengths )
 		record['words'] = sum(lengths)
 		record['words_per_sentence'] = max( lengths )
-		coll2.insert_one( record )
-
-	client.close()
-	client2.close()
+		coll_reviews.insert_one( record )
 
 def convert_review(review, length, emb_dict, padding):
 	"""
@@ -162,7 +157,7 @@ def convert_review(review, length, emb_dict, padding):
 
 	return review_emb_pad
 
-def get_input_data(n, max_words, emb_dim, quality, padding):
+def get_input_data(client, n, max_words, emb_dim, quality, padding):
 	"""
 	Returns an embedding of reviews from the database that satisfy certain criteria (number of words and quality).
 	To ensure that we are training on a balanced dataset we choose the same number of reviews (denoted by n) with each score.
@@ -170,7 +165,7 @@ def get_input_data(n, max_words, emb_dim, quality, padding):
 	"""
 	aux.log('Extracting input data for: n = {}, max_words = {}, emb_dim = {}, quality = {}, padding = {}'.format(n, max_words, emb_dim, quality, padding))
 
-	coll, client = aux.get_collection('reviews')
+	coll = client[config.database_name]['reviews']
 
 	# initialise empty arrays
 	X = np.zeros( [ 10 * n, max_words, emb_dim ] )
@@ -208,8 +203,6 @@ def get_input_data(n, max_words, emb_dim, quality, padding):
 		
 		# update the total counter
 		count_total += count_per_score
-
-	client.close()
 	
 	# truncate the empty rows
 	X = X[:count_total, :, :]
@@ -255,7 +248,7 @@ def load_data(data_file):
 ############################################################
 # Functions related to ML models
 ############################################################
-def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, Dense_units = [16, 16, 16], predictor = 'numerical', learning_rate = 0.001, dropout = 0.2, recurrent_dropout = 0.2, max_sentences = 30, max_words = 150, emb_dim = 50 ):
+def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, Dense_units = [16, 16, 16], predictor = 'numerical', learning_rate = 0.001, dropout = 0.2, recurrent_dropout = 0.2, max_words = 150, max_sentences = 30, max_words_per_sentence = 30, emb_dim = 50 ):
 	"""
 	Generates a complete set of parameters.
 	"""
@@ -267,13 +260,14 @@ def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, D
 	params['recurrent_dropout'] = recurrent_dropout
 	params['predictor'] = predictor
 	params['sentence_based'] = sentence_based
-	params['max_sentences'] = max_sentences
 	params['max_words'] = max_words
+	params['max_sentences'] = max_sentences
+	params['max_words_per_sentence'] = 
 	params['emb_dim'] = emb_dim
 	params['Dense_units'] = Dense_units
 	
 	if sentence_based:
-		input_shape = ( params['max_sentences'], params['max_words'], params['emb_dim'] )
+		input_shape = ( params['max_sentences'], params['max_words_per_sentence'], params['emb_dim'] )
 	else:
 		input_shape = ( params['max_words'], params['emb_dim'] )
 	
@@ -281,14 +275,13 @@ def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, D
 
 	return params
 
-def get_model_params(model_id):
+def get_model_params(client, model_id):
 	"""
 	Extracts parameters of a given model from the database.
 	"""
 	# obtain the whole dictionary from the database
-	coll, client = aux.get_collection('results')
+	coll = client[config.database_name]['results']
 	params = coll.find_one( { 'batch_name': model_id[0], 'batch_counter': model_id[1] } )
-	client.close()
 	
 	# remove the unwanted keys
 	keys_to_remove = ( '_id', 'batch_name', 'batch_counter', 'init_accuracy', 'final_accuracy', 'training_time', 'parent_id' )
@@ -476,7 +469,7 @@ def plot_performance( model_id, time_in_hrs, results ):
 	plt.close()
 
 #def setup_and_train_model( batch_name, input_shape, params, time_in_hrs = 1/60, initial_model = None ):
-def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
+def setup_and_train_model( client, batch_name, params, time_in_hrs = 1/60):
 	"""
 	Sets up a model according to the specification, trains it for a specified amount of time (specified in hours) and
 	evaluates the results on the test set. The results are then plotted, saved in an .npz file and in the database.
@@ -491,7 +484,7 @@ def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
 		os.mkdir('results/{}'.format(batch_name))
 
 	# determine the full name of the current model (based on the number of models from this family already present in the database)
-	coll, client = aux.get_collection('results')
+	coll = client[config.database_name]['results']
 	batch_counter = coll.count_documents( { 'batch_name': batch_name } ) + 1
 	model_id = ( batch_name, batch_counter )
 
@@ -530,7 +523,6 @@ def setup_and_train_model( batch_name, params, time_in_hrs = 1/60):
 	params['test_accuracy'] = ( results['test_accuracy'][0], results['test_accuracy'][-1] )
 	params['training_time'] = time_in_hrs
 	coll.insert_one( params )
-	client.close()
 
 	# this is currently optional, might be removed in the future
 	return results

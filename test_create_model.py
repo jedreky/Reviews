@@ -22,15 +22,16 @@ for sentence_based in (True, False):
 		for predictor in ('numerical', 'categorical'):
 			for j in range(N_test):
 				RNN_units = rng.integers(m)
-				max_sentences = rng.integers(m)
 				max_words = rng.integers(m)
+				max_sentences = rng.integers(m)
+				max_words_per_sentence = rng.integers(m)
 				emb_dim = rng.integers(m)
 				Dense_units = []
 				
 				for k in range( rng.integers(low = 1, high = m_Dense_layers) ):
 					Dense_units.append( rng.integers(low = 1, high = m) )
 			
-				params = analyser.generate_params( sentence_based = sentence_based, RNN_type = RNN_type, RNN_units = RNN_units, Dense_units = Dense_units, predictor = predictor, max_sentences = max_sentences, max_words = max_words, emb_dim = emb_dim )
+				params = analyser.generate_params( sentence_based = sentence_based, RNN_type = RNN_type, RNN_units = RNN_units, Dense_units = Dense_units, predictor = predictor, max_words = max_words, max_sentences = max_sentences, max_words_per_sentence = max_words_per_sentence, emb_dim = emb_dim )
 				model = analyser.create_model(params)
 				model.summary()
 				

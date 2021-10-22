@@ -100,12 +100,14 @@ def get_random_sleep_time(min_val = 3, ave_val = 8, alpha = 4):
 	return np.max( [ min_val, ave_val + alpha * rng.standard_normal() ] )
 
 
-def get_collection(name):
+def get_client():
 	"""
-	Returns a collection and a MongoClient (so that we can close the connection afterwards).
+	Returns a MongoClient.
 	"""
+	client = None
+
 	with open('mongo_keys.json', 'r') as json_file:
 		mongo_keys = json.load(json_file)
 		client = pymongo.MongoClient( username = mongo_keys['user'], password = mongo_keys['password'] )
-		coll = client[config.database_name][name]
-		return coll, client
+
+	return client

@@ -11,14 +11,14 @@ import time
 import reviews.auxiliary_functions as aux
 import reviews.config as config
 
-def get_movies_from_genre(genre, n):
+def get_movies_from_genre(client, genre, n):
 	"""
 	Finds at least n new movies from the given genre and adds them to the database.
 	"""
 	# create an empty list of movies to add
 	movies = []
 
-	coll, client = aux.get_collection('movies')
+	coll = client[config.database_name]['movies']
 
 	k = 1
 	while n > len(movies):
@@ -39,15 +39,14 @@ def get_movies_from_genre(genre, n):
 		k += config.movies_per_page
 
 	coll.insert_many(movies)
-	client.close()
 	aux.log('Successfully imported {} movies from genre: {}.'.format( len(movies), genre ) )
 
-def check_for_duplicates(collection, field, remove_duplicates = False):
+def check_for_duplicates(client, collection, field, remove_duplicates = False):
 	"""
 	Checks whether in a given collection there are entries with identical values of the field.
 	If specified, remove all but one.
 	"""
-	coll, client = aux.get_collection(collection)
+	coll = client[config.database_name][collection]
 	
 	count_by_id = { '$group': { '_id': '$' + field, 'count': { '$sum': 1 } } }
 	
@@ -81,10 +80,7 @@ def check_for_duplicates(collection, field, remove_duplicates = False):
 	if duplicate_count == 0:
 		aux.log('No duplicates founds.')
 
-	client.close()
-	
-
-def get_reviews(movie_id):
+def get_reviews(client, movie_id):
 	"""
 	Given an id of a movie, extracts all the reviews visible on the first page and stores them in the database.
 	"""
@@ -92,7 +88,7 @@ def get_reviews(movie_id):
 	source = get_website_source(url)
 	reviews = extract_reviews(source)
 	
-	coll, client = aux.get_collection('raw_reviews')
+	coll = client[config.database_name]['raw_reviews']
 	
 	for review in reviews:
 		# check if the review is not already in the database to avoid duplicates
@@ -102,7 +98,6 @@ def get_reviews(movie_id):
 		else:
 			aux.log('This review already exists in the database: movie_id = {}, content = {}.'.format( movie_id, review['content'] ))
 
-	client.close()
 	aux.log('Number of reviews found: {}'.format(str(len(reviews))))
 
 def get_website_source(url):
@@ -165,12 +160,12 @@ def process_review(raw_text):
 	review['votes'] = votes
 	return review
 
-def get_all_reviews():
+def get_all_reviews(client):
 	"""
 	Downloads reviews for all the movies in the database whose status is 0 (unprocessed).
 	Recall that we only download reviews visible on the first page.
 	"""
-	coll, client = aux.get_collection('movies')
+	coll = client[config.database_name]['movies']
 	# find movies which have not been processed yet
 	results = coll.find( {'status': 0} )
 
@@ -181,5 +176,4 @@ def get_all_reviews():
 		coll.update( { 'movie_id': movie_id }, { '$set': { 'status': 1 } } )
 		#time.sleep( aux.get_random_sleep_time() )
 	
-	client.close()
 	aux.log('Downloading finished successfully.')

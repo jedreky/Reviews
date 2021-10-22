@@ -10,4 +10,6 @@ import reviews.crawler as crawler
 #for genre in genres:
 #	crawler.get_movies_from_genre(genre, n)
 
-crawler.get_all_reviews()
+client = aux.get_client()
+crawler.get_all_reviews(client)
+client.close()
