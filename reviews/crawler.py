@@ -101,7 +101,7 @@ def get_reviews(client, movie_id):
 	aux.log('Number of reviews found: {}'.format(str(len(reviews))))
 
 def get_website_source(url):
-	with open('sample_headers.json', 'r') as json_file:
+	with open('json_data/sample_headers.json', 'r') as json_file:
 		sample_headers = json.load(json_file)
 		rng = np.random.default_rng()
 		headers = { 'User-Agent': sample_headers[ rng.integers(0, len(sample_headers)) ] }

@@ -262,7 +262,7 @@ def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, D
 	params['sentence_based'] = sentence_based
 	params['max_words'] = max_words
 	params['max_sentences'] = max_sentences
-	params['max_words_per_sentence'] = 
+	params['max_words_per_sentence'] = max_words_per_sentence
 	params['emb_dim'] = emb_dim
 	params['Dense_units'] = Dense_units
 	

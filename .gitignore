@@ -1,3 +1,12 @@
+# Project data
+json_data/
+glove.6B/
+
+# Notes
+notes/
+general-info
+technical-info
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

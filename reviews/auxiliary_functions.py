@@ -33,7 +33,7 @@ def send_email(body):
 	subject = 'Message from {}'.format(os.uname()[1])
 	message = 'Subject: {}\n\n{}'.format( subject, body )
 
-	with open('email_keys.json', 'r') as json_file:
+	with open('json_data/email_keys.json', 'r') as json_file:
 		email_keys = json.load(json_file)
 		context = ssl.create_default_context()
 		
@@ -106,7 +106,7 @@ def get_client():
 	"""
 	client = None
 
-	with open('mongo_keys.json', 'r') as json_file:
+	with open('json_data/mongo_keys.json', 'r') as json_file:
 		mongo_keys = json.load(json_file)
 		client = pymongo.MongoClient( username = mongo_keys['user'], password = mongo_keys['password'] )
 
