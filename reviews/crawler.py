@@ -41,45 +41,6 @@ def get_movies_from_genre(client, genre, n):
 	coll.insert_many(movies)
 	aux.log('Successfully imported {} movies from genre: {}.'.format( len(movies), genre ) )
 
-def check_for_duplicates(client, collection, field, remove_duplicates = False):
-	"""
-	Checks whether in a given collection there are entries with identical values of the field.
-	If specified, remove all but one.
-	"""
-	coll = client[config.database_name][collection]
-	
-	count_by_id = { '$group': { '_id': '$' + field, 'count': { '$sum': 1 } } }
-	
-	pipeline = [ count_by_id ]
-
-	results = coll.aggregate( pipeline )
-	
-	duplicate_count = 0
-
-	for r in results:
-		if r['count'] > 1:
-			movie_id = r['_id']
-			aux.log('Duplicates found for: {} = {}'.format(field, movie_id))
-
-			if remove_duplicates:
-				# find all the duplicates
-				records = coll.find( {'movie_id': movie_id} )
-				# save the first record to add it back later
-				record = records[0]
-				# remove the _id key of the record (we do not need it)
-				del( record['_id'] )
-				# remove all the duplicates
-				coll.delete_many( {'movie_id': movie_id} )
-				# add the record back in
-				coll.insert_one( record )
-				
-				aux.log('Duplicates removed for: {} = {}'.format(field, r['_id']))
-
-			duplicate_count += 1
-	
-	if duplicate_count == 0:
-		aux.log('No duplicates founds.')
-
 def get_reviews(client, movie_id):
 	"""
 	Given an id of a movie, extracts all the reviews visible on the first page and stores them in the database.
@@ -108,7 +69,7 @@ def get_website_source(url):
 		r = requests.get(url, headers = headers)
 		return r.text
 
-def extract_reviews(source, quality_threshold = 0.5, votes_threshold = 5):
+def extract_reviews(source):
 	"""
 	Given a source code of a website extracts all the reviews and makes a list of those matching our criteria.
 	"""
@@ -122,15 +83,13 @@ def extract_reviews(source, quality_threshold = 0.5, votes_threshold = 5):
 		for match in matches_list:
 			if prev_point > 0:
 				review = process_review( aux.sanitise_text( source[ prev_point : match.start() ] ) )
-				if review['quality'] >= quality_threshold and review['votes'] >= votes_threshold:
-					reviews.append(review)
+				reviews.append(review)
 
 			prev_point = match.start() - 30
 		
 		review = process_review( aux.sanitise_text( source[ prev_point : ] ) )
 
-		if review['quality'] >= quality_threshold and review['votes'] >= votes_threshold:
-			reviews.append(review)
+		reviews.append(review)
 
 	return reviews
 
@@ -150,12 +109,14 @@ def process_review(raw_text):
 	review['content'] = match.group(1)
 	review['chars'] = len( match.group(1) )
 	review['words'] = len( match.group(1).split() )
+
 	# quality is the fraction of people that found the review helpful
 	votes = aux.convert_to_int( match.group(3) )
 	if votes > 0:
 		review['quality'] = np.round( aux.convert_to_int( match.group(2) ) / votes, decimals = 2 )
 	else:
 		review['quality'] = 0
+
 	# votes is the number of people that assessed the review
 	review['votes'] = votes
 	return review
@@ -177,3 +138,65 @@ def get_all_reviews(client):
 		#time.sleep( aux.get_random_sleep_time() )
 	
 	aux.log('Downloading finished successfully.')
+
+def sanitise_review_content(content):
+	"""
+	Sanitises the content of a review by removing non-character symbols,
+	removing some abbreviations and unifying all end-of-sentence characters.
+	"""
+	content = content.lower()
+
+	# expand shortenings
+	content = content.replace("n't", ' not')
+	content = content.replace("'ll", ' will')
+	content = content.replace("'ve", ' have')
+	content = content.replace("'re", ' are')
+	content = content.replace("'m", ' am')
+
+	s_list = ( 'that', 'what', 'he', 'she', 'it')
+	for word in s_list:
+		content = content.replace( word + "'s" , word + ' is')
+
+	# change all end-of-sentence characters to a full stop
+	EOS_list = ( '.', '!', '?' )
+	for char in EOS_list:
+		content = content.replace( char, '.')
+
+	# reduce sequences of dots
+	content = re.sub('\.+', '.', content)
+
+	# remove all characters except for letters, white spaces and full stops
+	content = re.sub('[^a-z .]', '', content)
+
+	return content
+
+def process_raw_reviews(client):
+	"""
+	Process all the reviews from the raw_reviews database and store them in the reviews database.
+	"""
+	coll_raw = client[config.database_name]['raw_reviews']
+
+	results = coll_raw.find()
+
+	coll_reviews = client[config.database_name]['reviews']
+
+	for record in results:
+		# remove unnecessary fields
+		record.pop('_id')
+		record.pop('chars')
+
+		# sanitise the content
+		content = sanitise_review_content( record['content'] )
+		record['content'] = content
+
+		# split the content into sentences
+		sentences = content.split('.')
+
+		# compute the length (in words) of each sentence
+		lengths = list( map( lambda x : len( x.split() ), sentences ) )
+
+		# count the number of sentences, total number of words and the maximal number of words per sentence
+		record['sentences'] = sum( x > 0 for x in lengths )
+		record['words'] = sum(lengths)
+		record['words_per_sentence'] = max( lengths )
+		coll_reviews.insert_one( record )

@@ -20,29 +20,38 @@ import reviews.config as config
 ############################################################
 # Functions related to data verification and preparation
 ############################################################
-def check_score_distribution( client, max_words = None, max_sentences = None, max_words_per_sentence = None, quality = 0 ):
+def generate_filter( criteria ):
+	filt = []
+	
+	# add max_words criterion
+	if 'max_words' in criteria:
+		filt.append( { '$match': { 'words': { '$lte': criteria['max_words'] } } } )
+
+	# add max_sentences criterion
+	if 'max_sentences' in criteria:
+		filt.append( { '$match': { 'sentences': { '$lte': criteria['max_sentences'] } } } )
+
+	# add max_words_per_sentence criterion
+	if 'max_words_per_sentence' in criteria:
+		filt.append( { '$match': { 'words_per_sentence': { '$lte': criteria['max_words_per_sentence'] } } } )
+
+	# add votes criterion
+	if 'votes' in criteria:
+		filt.append( { '$match': { 'quality': { '$gte': criteria['votes'] } } } )
+
+	# add quality criterion
+	if 'quality' in criteria:
+		filt.append( { '$match': { 'quality': { '$gte': criteria['quality'] } } } )
+
+	return filt
+
+def check_score_distribution( client, criteria = {} ):
 	"""
 	From the processed reviews select the ones satisfying certain criteria and print the distribution of scores.
 	"""
-	coll = coll = client[config.database_name]['reviews']
+	coll = client[config.database_name]['reviews']
 
-	pipeline = []
-
-	# add max_words criterion
-	if max_words is not None:
-		pipeline.append( { '$match': { 'words': { '$lte': max_words } } } )
-
-	# add max_sentences criterion
-	if max_sentences is not None:
-		pipeline.append( { '$match': { 'sentences': { '$lte': max_sentences } } } )
-
-	# add max_words_per_sentence criterion
-	if max_words_per_sentence is not None:
-		pipeline.append( { '$match': { 'words_per_sentence': { '$lte': max_words_per_sentence } } } )
-
-	# add quality criterion
-	if quality > 0:
-		pipeline.append( { '$match': { 'quality': { '$gte': quality } } } )
+	pipeline = generate_filter(criteria)
 
 	# group the reviews according to score and count them
 	pipeline.append( { '$group': { '_id': '$score', 'count': { '$sum': 1 } } } )
@@ -52,111 +61,39 @@ def check_score_distribution( client, max_words = None, max_sentences = None, ma
 	for r in results:
 		print(r)
 
-def sanitise_review_content(content):
+def convert_text(text, length, emb_dict, padding):
 	"""
-	Sanitises the content of a review by removing non-character symbols,
-	removing some abbreviations and unifying all end-of-sentence characters.
+	Converts a list of words into its embedding of a fixed length.
 	"""
-	content = content.lower()
-
-	# expand shortenings
-	content = content.replace("n't", ' not')
-	content = content.replace("'ll", ' will')
-	content = content.replace("'ve", ' have')
-	content = content.replace("'re", ' are')
-	content = content.replace("'m", ' am')
-
-	s_list = ( 'that', 'what', 'he', 'she', 'it')
-	for word in s_list:
-		content = content.replace( word + "'s" , word + ' is')
-
-	# change all end-of-sentence characters to a full stop
-	EOS_list = ( '.', '!', '?' )
-	for char in EOS_list:
-		content = content.replace( char, '.')
-
-	# reduce sequences of dots
-	content = re.sub('\.+', '.', content)
-
-	# remove all characters except for letters, white spaces and full stops
-	content = re.sub('[^a-z .]', '', content)
-
-	return content
-
-def process_raw_reviews(client):
-	"""
-	Process all the reviews from the raw_reviews database and store them in the reviews database.
-	"""
-	coll_raw = client[config.database_name]['raw_reviews']
-
-	results = coll_raw.find()
-
-	coll_reviews = client[config.database_name]['reviews']
-
-	for record in results:
-		# remove unnecessary fields
-		record.pop('_id')
-		record.pop('chars')
-
-		# sanitise the content
-		content = sanitise_review_content( record['content'] )
-		record['content'] = content
-
-		# split the content into sentences
-		sentences = content.split('.')
-
-		# compute the length (in words) of each sentence
-		lengths = list( map( lambda x : len( x.split() ), sentences ) )
-
-		# count the number of sentences, total number of words and the maximal number of words per sentence
-		record['sentences'] = sum( x > 0 for x in lengths )
-		record['words'] = sum(lengths)
-		record['words_per_sentence'] = max( lengths )
-		coll_reviews.insert_one( record )
-
-def convert_review(review, length, emb_dict, padding):
-	"""
-	Converts a review into its embedding.
-	"""
-	# convert to lower case
-	review = review.lower()
-	
-	# define a tuple of symbols to be removed
-	symbols_to_remove = ( ':' , ',' , '.', '!', '-', '(', ')' )
-	
-	# replace symbols by white space
-	for symbol in symbols_to_remove:
-		review = review.replace( symbol, ' ' )
-	
-	print(review)
-	
-	# split the string into words
-	words = review.split()
 	
 	review_emb = []
+	review_emb_pad = None
 
 	# construct the embedding by appending vectors corresponding to every word found in the dictionary
-	for word in words:
+	for word in text.split():
 		if word in emb_dict:
 			review_emb.append( emb_dict[word] )
-#		else:
-#			#print('Word "{}" missing'.format(word))
+		else:
+			aux.log('Warning: Word "{}" missing'.format(word))
 
-	# check if the review matches the length criteria
+	# check if the length does not exceed the limit
 	if len(review_emb) <= length:
-		# if yes, apply appropriate padding
-		# note that review_emb.shape = ( max_words, emb_dim )
+
+		# apply appropriate padding
+		# note that review_emb.shape = ( length, emb_dim )
 		if padding == 'pre':
 			review_emb_pad = np.pad( np.array(review_emb), ( ( length - len(review_emb) , 0), (0, 0) ) )
 		elif padding == 'post':
 			review_emb_pad = np.pad( np.array(review_emb), ( ( 0,  length - len(review_emb) ), (0, 0) ) )
+		else:
+			aux.log('Error: Invalid padding choice.')
 
 	else:
-		# if no, set the return variable to None
-		review_emb_pad = None
+		aux.log('Error: Specified text is too long.')
 
 	return review_emb_pad
 
+#TODO: update the following function
 def get_input_data(client, n, max_words, emb_dim, quality, padding):
 	"""
 	Returns an embedding of reviews from the database that satisfy certain criteria (number of words and quality).
@@ -191,7 +128,7 @@ def get_input_data(client, n, max_words, emb_dim, quality, padding):
 
 		# loop over reviews until either we obtain the desired number or run out of reviews
 		while count_per_score < n and k < count:
-			review_emb = convert_review( results[k]['content'], max_words, emb_dict, padding )
+			review_emb = convert_text( results[k]['content'], max_words, emb_dict, padding )
 			k += 1
 
 			# if a valid embedding is returned add it to the dataset
@@ -215,9 +152,10 @@ def get_input_data(client, n, max_words, emb_dim, quality, padding):
 		aux.log('A sufficient number of reviews found.')
 	else:
 		aux.log('Insufficient reviews, the resulting matrices are smaller than asked for.')
-	
+
 	return X, Y
 
+#TODO: update the following function
 def generate_input_data_fixed_emb_dim(filename, n, max_words, emb_dim, quality, padding):
 	"""
 	Generates input data for a fixed embedding dimension and saves it to an .npz file.
@@ -231,13 +169,55 @@ def generate_input_data_fixed_emb_dim(filename, n, max_words, emb_dim, quality, 
 	with open('input_data/{}{}d-{}.npz'.format( filename, emb_dim, padding ), 'wb') as data_file:
 		np.savez(data_file, X_train = X_train, X_test = X_test, Y_train = Y_train, Y_test = Y_test)
 
-def generate_input_data(filename, n = 15, max_words = 150, quality = 0.5, padding = 'post'):
+def generate_input_data(client, filename, N_reviews, criteria = []):
 	"""
+	Constructs a balanced subset of reviews satisfying the selection criteria...
+	
 	Generates input data for all valid embedding dimensions and saves them to .npz files.
 	"""
+	
+	aux.log('Extracting reviews satisfying the following selection criteria:')
+
+	coll = client[config.database_name]['reviews']
+
+	filt = generate_filter( criteria )
+	
+	X = []
+	Y = []
+
+	# iterate over all the scores
+	for score in range(1, 11):
+		score_criterion = [ { '$match': { 'score': score } } ]
+		results = coll.aggregate( filt + score_criterion + [{'$count': 'count'}] )
+
+		# check if a sufficient number of reviews is found for each score
+		# TODO: take care of empty result set
+		if results.next()['count'] >= N_reviews:
+			results = coll.aggregate( filt + score_criterion )
+
+			for j in range(N_reviews):
+				r = results.next()
+				X.append( r['content'] )
+				Y.append( r['score'] )
+
+		else:
+			aux.log('Too few reviews found for score: {}'.format(score))
+
+	# shuffle both lists
+	X, Y = sklearn.utils.shuffle(X, Y)
+	# split the data into test and train sets
+	X_train, X_test, Y_train, Y_test = sklearn.model_selection.train_test_split( X, Y, test_size = 0.15 )
+	
+	#TODO: call an external function
+	
+	print(X_train)
+	print(Y_train)
+	print(X_test)
+	print(Y_test)
+
 	# iterate over all valid embedding dimensions
-	for emb_dim in config.emb_dims:
-		generate_input_data_fixed_emb_dim( filename, n, max_words, emb_dim, quality, padding )
+#	for emb_dim in config.emb_dims:
+#		generate_input_data_fixed_emb_dim( filename, n, max_words, emb_dim, quality, padding )
 
 def load_data(data_file):
 	"""
@@ -352,7 +332,7 @@ def compute_accuracy(model, X, Y, err = 1):
 	elif model.layers[1].units == 10:
 		interpret = lambda x : np.argmax(x)
 	else:
-		aux.log('Warning: the model is neither numerical nor categorical.')
+		aux.log('Error: the model is neither numerical nor categorical.')
 
 	# initialise the counter for good enough predictions
 	count = 0
@@ -390,7 +370,7 @@ def predict_rating(model, review, length, emb_dim):
 	emb_dict = aux.get_emb_dict( emb_dim )
 
 	# convert the review into a vector
-	x = convert_review( review, length, emb_dict, 'post' )
+	x = convert_text( review, length, emb_dict, 'post' )
 
 	# if successful compute the prediction
 	if x is not None:

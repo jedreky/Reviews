@@ -27,7 +27,7 @@ def log(string):
 	"""
 	Prints a timestamped message.
 	"""
-	print( get_timestamp() + ': ' + string )
+	print( '[{}] {}'.format( get_timestamp(), string ) )
 
 def send_email(body):
 	subject = 'Message from {}'.format(os.uname()[1])
@@ -99,7 +99,6 @@ def get_random_sleep_time(min_val = 3, ave_val = 8, alpha = 4):
 	rng = np.random.default_rng()
 	return np.max( [ min_val, ave_val + alpha * rng.standard_normal() ] )
 
-
 def get_client():
 	"""
 	Returns a MongoClient.
@@ -111,3 +110,42 @@ def get_client():
 		client = pymongo.MongoClient( username = mongo_keys['user'], password = mongo_keys['password'] )
 
 	return client
+
+def check_for_duplicates(client, collection, field, remove_duplicates = False):
+	"""
+	Checks whether in a given collection there are entries with identical values of the field.
+	If specified, remove all but one.
+	"""
+	coll = client[config.database_name][collection]
+	
+	count_by_id = { '$group': { '_id': '$' + field, 'count': { '$sum': 1 } } }
+	
+	pipeline = [ count_by_id ]
+
+	results = coll.aggregate( pipeline )
+	
+	duplicate_count = 0
+
+	for r in results:
+		if r['count'] > 1:
+			movie_id = r['_id']
+			aux.log('Duplicates found for: {} = {}'.format(field, movie_id))
+
+			if remove_duplicates:
+				# find all the duplicates
+				records = coll.find( {'movie_id': movie_id} )
+				# save the first record to add it back later
+				record = records[0]
+				# remove the _id key of the record (we do not need it)
+				del( record['_id'] )
+				# remove all the duplicates
+				coll.delete_many( {'movie_id': movie_id} )
+				# add the record back in
+				coll.insert_one( record )
+				
+				aux.log('Duplicates removed for: {} = {}'.format(field, r['_id']))
+
+			duplicate_count += 1
+	
+	if duplicate_count == 0:
+		aux.log('No duplicates founds.')
