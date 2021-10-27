@@ -20,6 +20,14 @@ import reviews.config as config
 ############################################################
 # Functions related to data verification and preparation
 ############################################################
+def get_input_shape(params):
+	if params['sentence_based']:
+		input_shape = ( params['max_sentences'], params['max_words_per_sentence'], params['emb_dim'] )
+	else:
+		input_shape = ( params['max_words'], params['emb_dim'] )
+	
+	return input_shape
+
 def generate_filter( criteria ):
 	filt = []
 	
@@ -61,119 +69,74 @@ def check_score_distribution( client, criteria = {} ):
 	for r in results:
 		print(r)
 
-def convert_text(text, length, emb_dict, padding):
+def convert_text(text, length, padding, emb_dim, emb_dict):
 	"""
 	Converts a list of words into its embedding of a fixed length.
 	"""
 	
-	review_emb = []
-	review_emb_pad = None
+	text_emb = []
+	text_emb_pad = None
 
 	# construct the embedding by appending vectors corresponding to every word found in the dictionary
 	for word in text.split():
 		if word in emb_dict:
-			review_emb.append( emb_dict[word] )
+			text_emb.append( emb_dict[word] )
 		else:
 			aux.log('Warning: Word "{}" missing'.format(word))
 
 	# check if the length does not exceed the limit
-	if len(review_emb) <= length:
-
-		# apply appropriate padding
-		# note that review_emb.shape = ( length, emb_dim )
-		if padding == 'pre':
-			review_emb_pad = np.pad( np.array(review_emb), ( ( length - len(review_emb) , 0), (0, 0) ) )
-		elif padding == 'post':
-			review_emb_pad = np.pad( np.array(review_emb), ( ( 0,  length - len(review_emb) ), (0, 0) ) )
+	if len(text_emb) <= length:
+		# check if the length is non-zero
+		if len(text_emb) > 0:
+			# apply appropriate padding, so that text_emb_pad.shape = ( length, emb_dim )
+			if padding == 'pre':
+				text_emb_pad = np.pad( np.array(text_emb), ( ( length - len(text_emb) , 0), (0, 0) ) )
+			elif padding == 'post':
+				text_emb_pad = np.pad( np.array(text_emb), ( ( 0,  length - len(text_emb) ), (0, 0) ) )
+			else:
+				aux.log('Error: Invalid padding choice.')
 		else:
-			aux.log('Error: Invalid padding choice.')
+			text_emb_pad = np.zeros( (length, emb_dim) )
+		
+		#TODO: assert shape of text_emb_pad ?
 
 	else:
 		aux.log('Error: Specified text is too long.')
 
-	return review_emb_pad
+	return text_emb_pad
 
-#TODO: update the following function
-def get_input_data(client, n, max_words, emb_dim, quality, padding):
-	"""
-	Returns an embedding of reviews from the database that satisfy certain criteria (number of words and quality).
-	To ensure that we are training on a balanced dataset we choose the same number of reviews (denoted by n) with each score.
-	In the last step the reviews are randomly permuted.
-	"""
-	aux.log('Extracting input data for: n = {}, max_words = {}, emb_dim = {}, quality = {}, padding = {}'.format(n, max_words, emb_dim, quality, padding))
+def embed_reviews( X, params ):
+	# get the embedding dictionary
+	emb_dict = aux.get_emb_dict( params['emb_dim'] )
 
-	coll = client[config.database_name]['reviews']
+	# compute input shape and define empty array
+	input_shape = get_input_shape(params)
+	X_emb = np.zeros( (len(X), ) + input_shape )
 
-	# initialise empty arrays
-	X = np.zeros( [ 10 * n, max_words, emb_dim ] )
-	Y = np.zeros( [ 10 * n, 1] )
+	if params['sentence_based']:
+		# iterate over reviews
+		for j in range(len(X)):
+			# split each review into sentences
+			sentences = X[j].split('.')
 
-	# get embedding dictionary
-	emb_dict = aux.get_emb_dict( emb_dim )
-
-	# initialise the total counter of reviews
-	count_total = 0
-
-	# iterate over all the scores
-	for score in range(1, 11):
-		# count the number of reviews satisfying the criteria and extract them
-		count = coll.count_documents( { 'words': { '$lte': max_words }, 'quality': { '$gte': quality }, 'score': score } )
-		results = coll.find( { 'words': { '$lte': max_words }, 'quality': { '$gte': quality }, 'score': score } )
-		
-		# initialise the counter for a given score
-		count_per_score = 0
-		
-		# initialise the current position
-		k = 0
-
-		# loop over reviews until either we obtain the desired number or run out of reviews
-		while count_per_score < n and k < count:
-			review_emb = convert_text( results[k]['content'], max_words, emb_dict, padding )
-			k += 1
-
-			# if a valid embedding is returned add it to the dataset
-			if review_emb is not None:
-				X[count_total + count_per_score, :, :] = review_emb
-				# subtract 1 to ensure that the scores are in the range [0, 1, ..., 9]
-				Y[count_total + count_per_score] = results[k]['score'] - 1
-				count_per_score += 1
-		
-		# update the total counter
-		count_total += count_per_score
-	
-	# truncate the empty rows
-	X = X[:count_total, :, :]
-	Y = Y[:count_total]
-	# shuffle the dataset
-	X, Y = sklearn.utils.shuffle(X, Y)
-
-	# check if a sufficient number of reviews has been found
-	if count_total == 10 * n:
-		aux.log('A sufficient number of reviews found.')
+			# iterate over non-empty sentences
+			for k in range(len(sentences)):
+				if sentences[k]:
+					X_emb[j, k, :, :] = convert_text(sentences[k], params['max_words_per_sentence'], params['padding'], params['emb_dim'], emb_dict)
 	else:
-		aux.log('Insufficient reviews, the resulting matrices are smaller than asked for.')
+		# iterate over reviews
+		for j in range(len(X)):
+			# replace full stops by white spaces
+			text = X[j].replace('.',' ')
+			# compute the embedding
+			X_emb[j, :, :] = convert_text(text, params['max_words'], params['padding'], params['emb_dim'], emb_dict)
 
-	return X, Y
-
-#TODO: update the following function
-def generate_input_data_fixed_emb_dim(filename, n, max_words, emb_dim, quality, padding):
-	"""
-	Generates input data for a fixed embedding dimension and saves it to an .npz file.
-	"""
-	# get input data from database
-	X, Y = get_input_data(n, max_words, emb_dim, quality, padding)
-	# split input data into train and test sets
-	X_train, X_test, Y_train, Y_test = sklearn.model_selection.train_test_split( X, Y, test_size = 0.15 )
-
-	# save input data to an .npz file
-	with open('input_data/{}{}d-{}.npz'.format( filename, emb_dim, padding ), 'wb') as data_file:
-		np.savez(data_file, X_train = X_train, X_test = X_test, Y_train = Y_train, Y_test = Y_test)
+	return X_emb
 
 def generate_input_data(client, filename, N_reviews, criteria = []):
 	"""
-	Constructs a balanced subset of reviews satisfying the selection criteria...
-	
-	Generates input data for all valid embedding dimensions and saves them to .npz files.
+	Constructs a balanced subset of reviews satisfying the selection criteria, generates input data
+	(in several flavours) and stores it in .npz files.
 	"""
 	
 	aux.log('Extracting reviews satisfying the following selection criteria:')
@@ -207,17 +170,33 @@ def generate_input_data(client, filename, N_reviews, criteria = []):
 	X, Y = sklearn.utils.shuffle(X, Y)
 	# split the data into test and train sets
 	X_train, X_test, Y_train, Y_test = sklearn.model_selection.train_test_split( X, Y, test_size = 0.15 )
+	Y_train = np.array(Y_train)
+	Y_test = np.array(Y_test)
 	
-	#TODO: call an external function
+	params_template = {}
 	
-	print(X_train)
-	print(Y_train)
-	print(X_test)
-	print(Y_test)
+	for p in ('max_words', 'max_sentences', 'max_words_per_sentence'):
+		params_template[p] = criteria[p]
 
-	# iterate over all valid embedding dimensions
-#	for emb_dim in config.emb_dims:
-#		generate_input_data_fixed_emb_dim( filename, n, max_words, emb_dim, quality, padding )
+	# iterate over all types of input data
+	for emb_dim in config.emb_dims:
+		params = params_template.copy()
+		params['emb_dim'] = emb_dim
+
+		for sentence_based in (True, False):
+			params['sentence_based'] = sentence_based
+
+			for padding in ('pre', 'post'):
+				params['padding'] = padding
+				X_train_emb = embed_reviews( X_train, params )
+				X_test_emb = embed_reviews( X_test, params )
+				f = 'input_data/{}-{}-{}d-{}.npz'.format( filename, sentence_based, emb_dim, padding )
+				print(f)
+				# save input data to an .npz file
+				with open(f, 'wb') as data_file:
+					np.savez(data_file, X_train = X_train_emb, X_test = X_test_emb, Y_train = Y_train, Y_test = Y_test)
+
+	return X_train, Y_train
 
 def load_data(data_file):
 	"""
@@ -245,13 +224,8 @@ def generate_params( sentence_based = False, RNN_type = 'GRU', RNN_units = 32, D
 	params['max_words_per_sentence'] = max_words_per_sentence
 	params['emb_dim'] = emb_dim
 	params['Dense_units'] = Dense_units
-	
-	if sentence_based:
-		input_shape = ( params['max_sentences'], params['max_words_per_sentence'], params['emb_dim'] )
-	else:
-		input_shape = ( params['max_words'], params['emb_dim'] )
-	
-	params['input_shape'] = input_shape
+
+	params['input_shape'] = get_input_shape(params)
 
 	return params
 
@@ -276,6 +250,7 @@ def create_model(params):
 	"""
 	Creates a recurrent neural network according to the specified parameters.
 	"""
+	# set the type of the main RNN units
 	if params['RNN_type'] == 'GRU':
 		RNN_layer = tf.keras.layers.GRU( params['RNN_units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'] )
 	elif params['RNN_type'] == 'LSTM':
@@ -283,6 +258,7 @@ def create_model(params):
 	else:
 		aux.log('Warning: invalid value of the the RNN_type parameter.')
 
+	# set the final layer
 	if params['predictor'] == 'numerical':
 		final_layer = tf.keras.layers.Dense(1, activation = None)
 		loss = tf.keras.losses.MeanSquaredError()
@@ -293,30 +269,36 @@ def create_model(params):
 		aux.log('Warning: invalid value of the predictor parameter.')
 
 	if params['sentence_based']:
+		# if sentence_based the sentences must be processed in parallel by the RNN
 		inputs = tf.keras.Input( shape = params['input_shape'] )
-		
+
 		X_list = []
-		
+
+		# every sentence is fed to the RNN independently, the outputs are stored in a list
 		for j in range( params['max_sentences'] ):
 			X_list.append( RNN_layer( inputs[ :, j, :, : ] ) )
 
+		# the list is converted to a TF object and reshaped
 		X = tf.stack(X_list, axis = 1)
 		req_shape = (-1, params['max_sentences'] * params['RNN_units'] )
-		
 		X = tf.reshape( X, shape = req_shape )
-		
+
+		# this is fed to the dense layers
 		for units in params['Dense_units']:
 			X = tf.keras.layers.Dense( units, activation = "relu" )(X)
-		
+
+		# and the final layer
 		outputs = final_layer(X)
 		model = tf.keras.Model( inputs = inputs, outputs = outputs )
-			
+		
 	else:
+		# if not sentence_based, the inputs are fed to RNN layers followed by the final layer
 		model = tf.keras.models.Sequential()
 		model.add( tf.keras.layers.InputLayer( input_shape = params['input_shape'] ) )
 		model.add( RNN_layer )
 		model.add( final_layer )
 
+	# compile model
 	model.compile( loss = loss, optimizer = tf.keras.optimizers.Adam( learning_rate = params['learning_rate'] ) )
 
 	return model

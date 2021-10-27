@@ -1,5 +1,5 @@
 """
-This file calls the create_model function with various parameters and performs a couple of optimisation steps on random data.
+This test calls the create_model function with various parameters and performs a couple of optimisation steps on random data.
 The goal is to check that the models are created successfully and with correct input/output dimensions.
 """
 
@@ -9,7 +9,7 @@ import tensorflow as tf
 import reviews.analyser as analyser
 import reviews.auxiliary_functions as aux
 
-def run_test():
+def test_random_models():
 	# number of random tests to perform for each case
 	N_tests_per_case = 5
 	# number of epochs to train for
@@ -51,7 +51,7 @@ def run_test():
 					params = analyser.generate_params( sentence_based = sentence_based, RNN_type = RNN_type, RNN_units = RNN_units, Dense_units = Dense_units, predictor = predictor, max_words = max_words, max_sentences = max_sentences, max_words_per_sentence = max_words_per_sentence, emb_dim = emb_dim )
 					ct += 1
 					aux.log('Running test {}/{}'.format(ct, N_tests))
-					print('Model parameters: {}'.format(params))
+					aux.log('Model parameters: {}'.format(params))
 					# create the model
 					model = analyser.create_model(params)
 					# print the summary
@@ -59,9 +59,9 @@ def run_test():
 
 					# generate random data and perform some training
 					X = tf.random.normal( batch_size + params['input_shape'] )
-					Y = tf.random.uniform( shape = batch_size, minval = 0, maxval = 9, dtype=tf.int64 )
+					Y = tf.random.uniform( shape = batch_size, minval = 0, maxval = 9, dtype = tf.int64 )
 					model.fit( X, Y, epochs = N_epochs )
 					aux.log('Model generated and trained successfully.\n')
 
 if __name__ == '__main__':
-	run_test()
+	test_random_models()
