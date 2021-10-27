@@ -96,9 +96,7 @@ def convert_text(text, length, padding, emb_dim, emb_dict):
 			else:
 				aux.log('Error: Invalid padding choice.')
 		else:
-			text_emb_pad = np.zeros( (length, emb_dim) )
-		
-		#TODO: assert shape of text_emb_pad ?
+			aux.log('Error: No words have been recognised.')
 
 	else:
 		aux.log('Error: Specified text is too long.')
@@ -119,10 +117,17 @@ def embed_reviews( X, params ):
 			# split each review into sentences
 			sentences = X[j].split('.')
 
-			# iterate over non-empty sentences
+			# iterate over sentences
+			ct = 0
 			for k in range(len(sentences)):
+				# check if the sentence is non-empty
 				if sentences[k]:
-					X_emb[j, k, :, :] = convert_text(sentences[k], params['max_words_per_sentence'], params['padding'], params['emb_dim'], emb_dict)
+					r = convert_text(sentences[k], params['max_words_per_sentence'], params['padding'], params['emb_dim'], emb_dict)
+					
+					# check if it produces a valid embedding
+					if r is not None:
+						X_emb[j, ct, :, :] = r
+						ct += 1
 	else:
 		# iterate over reviews
 		for j in range(len(X)):
