@@ -10,9 +10,10 @@ emb_dict_file = 'glove.6B/glove.6B.{}d'
 
 # valid embedding dimensions
 #emb_dims = ( 50, 100, 200, 300 )
-emb_dims = ( 50, 100 )
+emb_dims = ( 50, 100, 200 )
 
 # The maximal length of a review
+# DO WE STILL NEED THIS?
 max_words = 150
 
 # number of movies on every page

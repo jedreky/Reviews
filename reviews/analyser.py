@@ -133,7 +133,7 @@ def embed_reviews( X, params ):
 
 	return X_emb
 
-def generate_input_data(client, filename, N_reviews, criteria = []):
+def generate_input_data(client, filename, N_reviews, criteria = {}):
 	"""
 	Constructs a balanced subset of reviews satisfying the selection criteria, generates input data
 	(in several flavours) and stores it in .npz files.

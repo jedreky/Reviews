@@ -12,7 +12,7 @@ import reviews.config as config
 
 def test_data_generation():
 	N_reviews = 5
-	filename = 'data'
+	filename = 'test_data'
 	criteria = {'max_words': 50, 'max_sentences': 10, 'max_words_per_sentence': 20}
 	
 	# generate input data
