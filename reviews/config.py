@@ -9,8 +9,9 @@ database_name = 'Reviews'
 emb_dict_file = 'glove.6B/glove.6B.{}d'
 
 # valid embedding dimensions
+emb_dims = ( 50, 100 )
+# larger dimensions take too much memory
 #emb_dims = ( 50, 100, 200, 300 )
-emb_dims = ( 50, 100, 200 )
 
 # The maximal length of a review
 # DO WE STILL NEED THIS?

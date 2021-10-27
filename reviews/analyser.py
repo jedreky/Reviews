@@ -196,7 +196,7 @@ def generate_input_data(client, filename, N_reviews, criteria = {}):
 				X_train_emb = embed_reviews( X_train, params )
 				X_test_emb = embed_reviews( X_test, params )
 				f = 'input_data/{}-{}-{}d-{}.npz'.format( filename, sentence_based, emb_dim, padding )
-				print(f)
+				aux.log('Saving input data to file: {}'.format(f))
 				# save input data to an .npz file
 				with open(f, 'wb') as data_file:
 					np.savez(data_file, X_train = X_train_emb, X_test = X_test_emb, Y_train = Y_train, Y_test = Y_test)
