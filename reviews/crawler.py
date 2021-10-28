@@ -147,6 +147,7 @@ def sanitise_review_content(content):
 	content = content.lower()
 
 	# expand shortenings
+	content = content.replace("won't", 'will not')
 	content = content.replace("n't", ' not')
 	content = content.replace("'ll", ' will')
 	content = content.replace("'ve", ' have')
