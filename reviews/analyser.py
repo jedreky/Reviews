@@ -69,7 +69,7 @@ def check_score_distribution( client, criteria = {} ):
 	for r in results:
 		print(r)
 
-def convert_text(text, length, padding, emb_dim, emb_dict):
+def convert_text(text, length, padding, emb_dim, emb_dict, verbose = False):
 	"""
 	Converts a list of words into its embedding of a fixed length.
 	"""
@@ -82,7 +82,8 @@ def convert_text(text, length, padding, emb_dim, emb_dict):
 		if word in emb_dict:
 			text_emb.append( emb_dict[word] )
 		else:
-			aux.log('Warning: Word "{}" missing'.format(word))
+			if verbose:
+				aux.log('Warning: word "{}" missing'.format(word))
 
 	# check if the length does not exceed the limit
 	if len(text_emb) <= length:
@@ -94,12 +95,13 @@ def convert_text(text, length, padding, emb_dim, emb_dict):
 			elif padding == 'post':
 				text_emb_pad = np.pad( np.array(text_emb), ( ( 0,  length - len(text_emb) ), (0, 0) ) )
 			else:
-				aux.log('Error: Invalid padding choice.')
+				aux.log('Error: invalid padding choice.')
 		else:
-			aux.log('Error: No words have been recognised.')
+			if verbose:
+				aux.log('Warning: no words have been recognised.')
 
 	else:
-		aux.log('Error: Specified text is too long.')
+		aux.log('Error: specified text is too long.')
 
 	return text_emb_pad
 
@@ -169,7 +171,7 @@ def generate_input_data(client, filename, N_reviews, criteria = {}):
 				Y.append( r['score'] )
 
 		else:
-			aux.log('Too few reviews found for score: {}'.format(score))
+			aux.log('Warning: too few reviews found for score: {}'.format(score))
 
 	# shuffle both lists
 	X, Y = sklearn.utils.shuffle(X, Y)
@@ -182,6 +184,10 @@ def generate_input_data(client, filename, N_reviews, criteria = {}):
 	
 	for p in ('max_words', 'max_sentences', 'max_words_per_sentence'):
 		params_template[p] = criteria[p]
+
+	# create directory if it does not exist
+	if not os.path.exists('input_data'):
+		os.mkdir('input_data')
 
 	# iterate over all types of input data
 	for emb_dim in config.emb_dims:
@@ -261,7 +267,7 @@ def create_model(params):
 	elif params['RNN_type'] == 'LSTM':
 		RNN_layer = tf.keras.layers.LSTM( params['RNN_units'], dropout = params['dropout'], recurrent_dropout = params['recurrent_dropout'] )
 	else:
-		aux.log('Warning: invalid value of the the RNN_type parameter.')
+		aux.log('Error: invalid value of the the RNN_type parameter.')
 
 	# set the final layer
 	if params['predictor'] == 'numerical':
@@ -271,7 +277,7 @@ def create_model(params):
 		final_layer = tf.keras.layers.Dense(10, activation = 'softmax')
 		loss = tf.keras.losses.SparseCategoricalCrossentropy()
 	else:
-		aux.log('Warning: invalid value of the predictor parameter.')
+		aux.log('Error: invalid value of the predictor parameter.')
 
 	if params['sentence_based']:
 		# if sentence_based the sentences must be processed in parallel by the RNN
