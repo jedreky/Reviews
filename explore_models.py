@@ -8,12 +8,12 @@ import reviews.auxiliary_functions as aux
 import reviews.config as config
 
 filename = 'data'
-batch_name = '4_padding'
+batch_name = '5_sentence_based'
 
 layers = ('GRU', 'LSTM')
 units_options = (32, 64, 128)
 
-training_time = 1/1000
+training_time = 11
 
 client = aux.get_client()
 
@@ -58,6 +58,16 @@ elif batch_name == '4_padding':
 	for padding in ('pre', 'post'):
 		params = analyser.generate_params(learning_rate, layers[0], units_options[0])
 		params['data_file'] = 'input_data/{}{}d-{}.npz'.format( filename, params['input_shape'][1], padding )
+		analyser.setup_and_train_model(client, batch_name, params, training_time )
+
+elif batch_name == '5_sentence_based':
+	learning_rate = 0.0015
+	padding = 'post'
+	emb_dim = 50
+	
+	for sentence_based in (True, False):
+		params = analyser.generate_params(sentence_based = sentence_based, learning_rate = learning_rate, max_words = 250, max_sentences = 15, max_words_per_sentence = 50 )
+		params['data_file'] = f = 'input_data/{}-{}-{}d-{}.npz'.format( filename, sentence_based, emb_dim, padding )
 		analyser.setup_and_train_model(client, batch_name, params, training_time )
 
 else:

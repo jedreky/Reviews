@@ -320,9 +320,9 @@ def compute_accuracy(model, X, Y, err = 1):
 	"""
 	# look at the number of units in the final layer determine whether the model is numerical or categorical
 	# based on this define how to interpret the prediction
-	if model.layers[1].units == 1:
+	if model.layers[-1].units == 1:
 		interpret = lambda x : x
-	elif model.layers[1].units == 10:
+	elif model.layers[-1].units == 10:
 		interpret = lambda x : np.argmax(x)
 	else:
 		aux.log('Error: the model is neither numerical nor categorical.')
@@ -331,7 +331,7 @@ def compute_accuracy(model, X, Y, err = 1):
 	count = 0
 
 	for j in range( X.shape[0] ):
-		Y_pred = interpret( model.predict( X[j].reshape( [1, X.shape[1], X.shape[2]] ) ) )
+		Y_pred = interpret( model.predict( X[j].reshape( (1, ) + X[j].shape ) ) )
 
 		if np.abs( Y_pred - Y[j] ) <= err:
 			count += 1
@@ -381,8 +381,8 @@ def train_model(model_id, model, data_file, time_in_secs):
 	test_accuracy = []
 	
 	# compute the initial accuracy of the model
-	train_accuracy.append( compute_accuracy( model, X_train, Y_train ) )
-	test_accuracy.append( compute_accuracy( model, X_test, Y_test ) )
+	#train_accuracy.append( compute_accuracy( model, X_train, Y_train ) )
+	#test_accuracy.append( compute_accuracy( model, X_test, Y_test ) )
 
 	# start the clock
 	t0 = time.time()
@@ -398,15 +398,15 @@ def train_model(model_id, model, data_file, time_in_secs):
 		train_loss += hist.history['loss']
 		test_loss += hist.history['val_loss']
 		# compute the accuracy and append it to the lists
-		train_accuracy.append( compute_accuracy( model, X_train, Y_train ) )
-		test_accuracy.append( compute_accuracy( model, X_test, Y_test ) )
+		#train_accuracy.append( compute_accuracy( model, X_train, Y_train ) )
+		#test_accuracy.append( compute_accuracy( model, X_test, Y_test ) )
 
 	# store the training results in a single dictionary
 	results = {}
 	results['train_loss'] = train_loss
 	results['test_loss'] = test_loss
-	results['train_accuracy'] = train_accuracy
-	results['test_accuracy'] = test_accuracy
+	#results['train_accuracy'] = train_accuracy
+	#results['test_accuracy'] = test_accuracy
 
 	return results
 
@@ -433,9 +433,9 @@ def plot_performance( model_id, time_in_hrs, results ):
 	axs[0].legend( loc = 'right' )
 
 	# plot the accuracy data
-	axs[1].plot( results['train_accuracy'], label = 'Train set accuracy' )
-	axs[1].plot( results['test_accuracy'], label = 'Test set accuracy' )
-	axs[1].legend( loc = 'right' )
+	#axs[1].plot( results['train_accuracy'], label = 'Train set accuracy' )
+	#axs[1].plot( results['test_accuracy'], label = 'Test set accuracy' )
+	#axs[1].legend( loc = 'right' )
 
 	# save the figure
 	fig.savefig('results/{}/{}.png'.format( model_id[0], model_id[1] ))
@@ -485,15 +485,16 @@ def setup_and_train_model( client, batch_name, params, time_in_hrs = 1/60):
 	
 	# save the results to an .npz file
 	with open('results/{}/{}.npz'.format( model_id[0], model_id[1] ), 'wb') as data_file:
-		np.savez(data_file, train_loss = results['train_loss'], test_loss = results['test_loss'], train_accuracy = results['train_accuracy'], test_accuracy = results['test_accuracy'])
+		np.savez(data_file, train_loss = results['train_loss'], test_loss = results['test_loss'])
+		#, train_accuracy = results['train_accuracy'], test_accuracy = results['test_accuracy'])
 
 	# store the training information in the database
 	params['batch_name'] = batch_name
 	params['batch_counter'] = batch_counter
 	params['train_loss'] = ( results['train_loss'][0], results['train_loss'][-1] )
 	params['test_loss'] = ( results['test_loss'][0], results['test_loss'][-1] )
-	params['train_accuracy'] = ( results['train_accuracy'][0], results['train_accuracy'][-1] )
-	params['test_accuracy'] = ( results['test_accuracy'][0], results['test_accuracy'][-1] )
+	#params['train_accuracy'] = ( results['train_accuracy'][0], results['train_accuracy'][-1] )
+	#params['test_accuracy'] = ( results['test_accuracy'][0], results['test_accuracy'][-1] )
 	params['training_time'] = time_in_hrs
 	coll.insert_one( params )
 
