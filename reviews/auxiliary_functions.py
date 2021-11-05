@@ -1,7 +1,7 @@
 """
 This file contains some auxiliary functions of the Reviews package.
 """
-
+# Standard library imports
 import datetime
 import json
 import numpy as np
@@ -11,8 +11,8 @@ import pymongo
 import smtplib
 import ssl
 
+# Reviews imports
 import reviews.config as config
-
 #######################################################
 # Short functions
 #######################################################

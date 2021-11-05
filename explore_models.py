@@ -2,11 +2,13 @@
 This files explores a family of models by optimising them for a specified amount of time.
 We assume that the training data has already been generated and stored in an .npz file.
 """
-
+# Reviews imports
 import reviews.analyser as analyser
 import reviews.auxiliary_functions as aux
 import reviews.config as config
-
+#######################################################
+# Explore various models
+#######################################################
 filename = 'data'
 batch_name = '5_sentence_based'
 

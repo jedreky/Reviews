@@ -1,16 +1,19 @@
 """
 This file contains functions related to crawling the IMDB website, extracting reviews and storing them in a Mongo database.
 """
-
+# Standard library imports
 import json
 import numpy as np
 import re
 import requests
 import time
 
+# Reviews imports
 import reviews.auxiliary_functions as aux
 import reviews.config as config
-
+#######################################################
+# Functions used to crawl IMDB
+#######################################################
 def get_movies_from_genre(client, genre, n):
 	"""
 	Finds at least n new movies from the given genre and adds them to the database.

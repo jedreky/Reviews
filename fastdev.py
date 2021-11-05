@@ -1,18 +1,20 @@
 """
 This file is used for fast development of simple features.
 """
-
+# Standard library imports
 import numpy as np
 import tensorflow as tf
-
 from tensorflow.keras.layers import Dense, GRU, LSTM
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
+# Reviews imports
 import reviews.analyser as analyser
 import reviews.auxiliary_functions as aux
 import reviews.config as config
-
+#######################################################
+# Fastdev functions
+#######################################################
 def test_fun(d):
 	d['zaba'] = 'krab'
 

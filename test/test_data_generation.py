@@ -2,14 +2,17 @@
 This test generates input data and then uses it to train a couple of models.
 The goal is to check that the format of the input data matches what we expect.
 """
-
+# Standard library imports
 import numpy as np
 import tensorflow as tf
 
+# Reviews imports
 import reviews.analyser as analyser
 import reviews.auxiliary_functions as aux
 import reviews.config as config
-
+#######################################################
+# Test of the data generation functionality
+#######################################################
 def test_data_generation():
 	N_reviews = 5
 	filename = 'test_data'

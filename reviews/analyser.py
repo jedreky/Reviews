@@ -1,7 +1,7 @@
 """
 This file contains functions related to processing and analysing the reviews.
 """
-
+# Standard library imports
 import csv
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,9 +14,9 @@ import sklearn.utils
 import tensorflow as tf
 import time
 
+# Reviews imports
 import reviews.auxiliary_functions as aux
 import reviews.config as config
-
 ############################################################
 # Functions related to data verification and preparation
 ############################################################

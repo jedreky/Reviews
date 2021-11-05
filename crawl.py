@@ -1,10 +1,12 @@
 """
 This file contains some simple procedures for downloading and processing reviews.
 """
-
+# Reviews imports
 import reviews.auxiliary_functions as aux
 import reviews.crawler as crawler
-
+#######################################################
+# Perform the crawl
+#######################################################
 #n = 10
 #genres = ('action', 'adventure', 'thriller')
 

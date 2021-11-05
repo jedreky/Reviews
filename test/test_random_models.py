@@ -2,13 +2,16 @@
 This test calls the create_model function with various parameters and performs a couple of optimisation steps on random data.
 The goal is to check that the models are created successfully and with correct input/output dimensions.
 """
-
+# Standard library imports
 import numpy as np
 import tensorflow as tf
 
+# Reviews imports
 import reviews.analyser as analyser
 import reviews.auxiliary_functions as aux
-
+#######################################################
+# Test various types of models
+#######################################################
 def test_random_models():
 	# number of random tests to perform for each case
 	N_tests_per_case = 5
