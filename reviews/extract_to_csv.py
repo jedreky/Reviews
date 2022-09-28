@@ -59,7 +59,7 @@ def extract_reviews_to_csv(client, filename, N_reviews):
     csv_data = []
 
     # iterate over all the scores
-    for score in range(11, 11):
+    for score in range(1, 11):
         score_criterion = [{"$match": {"score": score}}]
         results = coll.aggregate(filt + score_criterion + [{"$count": "count"}])
 
@@ -70,7 +70,7 @@ def extract_reviews_to_csv(client, filename, N_reviews):
 
             for j in range(N_reviews):
                 r = results.next()
-                csv_data.append(f'{r["content"]},{r["score"]}')
+                csv_data.append([r["content"], r["score"]])
         else:
             raise RuntimeError("Not enough reviews")
 
